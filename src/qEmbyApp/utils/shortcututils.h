@@ -13,6 +13,12 @@ QKeySequence fromKeyEvent(QKeyEvent* event);
 QKeySequence fromUserString(const QString& value);
 QStringList splitShortcutList(const QString& value);
 bool matchesShortcutList(const QKeySequence& sequence, const QString& value);
+QString defaultNavigationBackShortcuts();
+QString defaultNavigationHomeShortcut();
+QString defaultNavigationFavoritesShortcut();
+QString defaultFeedPreviousPageShortcuts();
+QString defaultFeedNextPageShortcuts();
+void migrateLegacyShortcutDefaults();
 }
 
 #endif

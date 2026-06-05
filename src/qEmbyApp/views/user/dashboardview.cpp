@@ -602,10 +602,10 @@ bool DashboardView::triggerFeedShortcut(const QKeySequence& sequence)
 
     const QString previous = ConfigStore::instance()->get<QString>(
         ConfigKeys::ShortcutFeedPreviousPage,
-        QStringLiteral("PgUp; Page Up"));
+        ShortcutUtils::defaultFeedPreviousPageShortcuts());
     const QString next = ConfigStore::instance()->get<QString>(
         ConfigKeys::ShortcutFeedNextPage,
-        QStringLiteral("PgDown; Page Down"));
+        ShortcutUtils::defaultFeedNextPageShortcuts());
 
     HorizontalListViewGallery* gallery = activeFeedGallery();
     if (!gallery) {

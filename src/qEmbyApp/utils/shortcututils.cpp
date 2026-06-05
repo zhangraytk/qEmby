@@ -1,7 +1,10 @@
 #include "shortcututils.h"
 
+#include "config/config_keys.h"
+#include "config/configstore.h"
 #include <QKeyEvent>
 #include <QRegularExpression>
+#include <QSet>
 
 namespace
 {
@@ -173,6 +176,100 @@ bool matchesShortcutList(const QKeySequence& sequence, const QString& value)
     }
 
     return false;
+}
+
+QString defaultNavigationBackShortcuts()
+{
+    QStringList shortcuts;
+    QSet<QString> seen;
+
+    auto append = [&shortcuts, &seen](const QString& value) {
+        const QString trimmed = value.trimmed();
+        if (trimmed.isEmpty() || seen.contains(trimmed)) {
+            return;
+        }
+        seen.insert(trimmed);
+        shortcuts.append(trimmed);
+    };
+
+    const auto systemBack = QKeySequence::keyBindings(QKeySequence::Back);
+    for (const QKeySequence& sequence : systemBack) {
+        append(sequence.toString(QKeySequence::PortableText));
+    }
+
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    append(QStringLiteral("Meta+Left"));
+    append(QStringLiteral("Meta+["));
+#else
+    append(QStringLiteral("Alt+Left"));
+#endif
+    append(QStringLiteral("Back"));
+    append(QStringLiteral("Esc"));
+
+    return shortcuts.join(QStringLiteral("; "));
+}
+
+QString defaultNavigationHomeShortcut()
+{
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    return QStringLiteral("Meta+Shift+H");
+#else
+    return QStringLiteral("Ctrl+H");
+#endif
+}
+
+QString defaultNavigationFavoritesShortcut()
+{
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    return QStringLiteral("Meta+Shift+F");
+#else
+    return QStringLiteral("Ctrl+Shift+F");
+#endif
+}
+
+QString defaultFeedPreviousPageShortcuts()
+{
+    return QStringLiteral("Left; PgUp; Page Up");
+}
+
+QString defaultFeedNextPageShortcuts()
+{
+    return QStringLiteral("Right; PgDown; Page Down");
+}
+
+void migrateLegacyShortcutDefaults()
+{
+    auto* store = ConfigStore::instance();
+    const QStringList keys = store->allKeys();
+
+    auto migrateIfLegacy = [store, &keys](const QString& key,
+                                          const QString& legacy,
+                                          const QString& replacement) {
+        if (!keys.contains(key)) {
+            return;
+        }
+
+        const QString current = store->get<QString>(key).trimmed();
+        if (current == legacy && current != replacement) {
+            store->set(key, replacement);
+        }
+    };
+
+    migrateIfLegacy(ConfigKeys::ShortcutNavigationBack,
+                    QStringLiteral("Back; Alt+Left; Esc; Escape"),
+                    defaultNavigationBackShortcuts());
+    migrateIfLegacy(ConfigKeys::ShortcutNavigationHome,
+                    QStringLiteral("Ctrl+H"),
+                    defaultNavigationHomeShortcut());
+    migrateIfLegacy(ConfigKeys::ShortcutNavigationFavorites,
+                    QStringLiteral("Ctrl+Shift+F"),
+                    defaultNavigationFavoritesShortcut());
+    migrateIfLegacy(ConfigKeys::ShortcutFeedPreviousPage,
+                    QStringLiteral("PgUp; Page Up"),
+                    defaultFeedPreviousPageShortcuts());
+    migrateIfLegacy(ConfigKeys::ShortcutFeedNextPage,
+                    QStringLiteral("PgDown; Page Down"),
+                    defaultFeedNextPageShortcuts());
 }
 
 }

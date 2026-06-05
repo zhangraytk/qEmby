@@ -126,6 +126,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     
     m_backClickTimer.invalidate();
+    ShortcutUtils::migrateLegacyShortcutDefaults();
 
 #if (defined(Q_OS_MACOS) || defined(Q_OS_MAC)) && \
     (QT_VERSION >= QT_VERSION_CHECK(6, 9, 0))
@@ -215,7 +216,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto windowBar = new QWK::WindowBar();
 #if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
-    windowBar->layout()->setContentsMargins(80, 0, 0, 0);
+    constexpr int kMacSystemButtonAreaWidth = 80;
+    constexpr int kMacTitlebarNavWidth = 216;
+    constexpr int kMacTitlebarNavButtonWidth = kMacTitlebarNavWidth / 3;
+    windowBar->layout()->setContentsMargins(kMacSystemButtonAreaWidth, 0, 0, 0);
 #endif
     windowBar->setIconButton(iconButton);
     windowBar->setPinButton(themeButton);
@@ -271,7 +275,7 @@ MainWindow::MainWindow(QWidget *parent)
 #if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
     auto *macTitlebarNavSpacer = new QWidget(centerContainer);
     macTitlebarNavSpacer->setObjectName("mac-titlebar-nav-spacer");
-    macTitlebarNavSpacer->setFixedWidth(216);
+    macTitlebarNavSpacer->setFixedWidth(kMacTitlebarNavWidth);
     macTitlebarNavSpacer->hide();
 
     auto *macTitlebarNav = new QWidget(centerContainer);
@@ -279,20 +283,23 @@ MainWindow::MainWindow(QWidget *parent)
     auto *macTitlebarNavLayout = new QHBoxLayout(macTitlebarNav);
     macTitlebarNavLayout->setContentsMargins(0, 0, 0, 0);
     macTitlebarNavLayout->setSpacing(0);
+    backButton->setFixedWidth(kMacTitlebarNavButtonWidth);
+    homeButton->setFixedWidth(kMacTitlebarNavButtonWidth);
+    favButton->setFixedWidth(kMacTitlebarNavButtonWidth);
     macTitlebarNavLayout->addWidget(backButton);
     macTitlebarNavLayout->addWidget(homeButton);
     macTitlebarNavLayout->addWidget(favButton);
-    macTitlebarNav->setFixedWidth(216);
+    macTitlebarNav->setFixedWidth(kMacTitlebarNavWidth);
     macTitlebarNav->hide();
 
-    centerLayout->addWidget(macTitlebarNavSpacer);
+    centerLayout->addWidget(macTitlebarNav);
 #endif
     centerLayout->addStretch();
     centerLayout->addWidget(m_globalSearchBox, 0, Qt::AlignVCenter); 
     centerLayout->addWidget(macCenteredTitleLabel, 0, Qt::AlignVCenter);
     centerLayout->addStretch();
 #if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
-    centerLayout->addWidget(macTitlebarNav);
+    centerLayout->addWidget(macTitlebarNavSpacer);
 #endif
     centerContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
@@ -301,9 +308,12 @@ MainWindow::MainWindow(QWidget *parent)
         titlebarLayout->insertWidget(1, backButton);
         titlebarLayout->insertWidget(2, homeButton);
         titlebarLayout->insertWidget(3, favButton);
-#endif
         const int centerIndex = qMax(0, titlebarLayout->count() - 3);
         titlebarLayout->insertWidget(centerIndex, centerContainer);
+#else
+        titlebarLayout->insertWidget(0, centerContainer, 1);
+        titlebarLayout->setStretchFactor(centerContainer, 1);
+#endif
     }
 
 
@@ -328,9 +338,9 @@ MainWindow::MainWindow(QWidget *parent)
     agent->setSystemButton(QWK::WindowAgentBase::Maximize, maxButton);
     agent->setSystemButton(QWK::WindowAgentBase::Close, closeButton);
 #endif
-#if defined(Q_OS_MAC)
-    agent->setSystemButtonAreaCallback([](const QSize &size) {
-        return QRect(QPoint(0, 0), QSize(80, size.height()));
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    agent->setSystemButtonAreaCallback([=](const QSize &size) {
+        return QRect(QPoint(0, 0), QSize(kMacSystemButtonAreaWidth, size.height()));
     });
 #endif
 
@@ -777,16 +787,16 @@ bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
     }
 
     if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationBack,
-                        QStringLiteral("Back; Alt+Left; Esc; Escape"))) {
+                        ShortcutUtils::defaultNavigationBackShortcuts())) {
         return triggerBackNavigation();
     }
     if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationHome,
-                        QStringLiteral("Ctrl+H"))) {
+                        ShortcutUtils::defaultNavigationHomeShortcut())) {
         triggerHomeNavigation();
         return true;
     }
     if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationFavorites,
-                        QStringLiteral("Ctrl+Shift+F"))) {
+                        ShortcutUtils::defaultNavigationFavoritesShortcut())) {
         triggerFavoritesNavigation();
         return true;
     }

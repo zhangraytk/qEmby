@@ -4,9 +4,11 @@
 #include "../../components/modernnumberinput.h"
 #include "../../components/moderntoast.h"
 #include "../../components/modernswitch.h"
+#include "../../components/shortcutedit.h"
 #include "../../components/settingscard.h"
 #include "../../components/settingssubpanel.h"
 #include "../../managers/searchhistorymanager.h"
+#include "../../utils/shortcututils.h"
 #include "config/config_keys.h"
 #include "config/configstore.h"
 #include <QLabel>
@@ -198,50 +200,50 @@ PageAppearance::PageAppearance(QEmbyCore *core, QWidget *parent) : SettingsPageB
             ModernToast::showMessage(tr("Search history cleared"), 1500);
         });
 
-    auto *backShortcutEdit = new QLineEdit(this);
+    auto *backShortcutEdit = new ShortcutEdit(this);
     m_mainLayout->addWidget(new SettingsCard(":/svg/dark/general.svg",
                                              tr("Back Shortcut"),
-                                             tr("Separate multiple shortcuts with semicolons"),
+                                             tr("Click and press a shortcut; paste semicolon-separated alternatives if needed"),
                                              backShortcutEdit,
                                              ConfigKeys::ShortcutNavigationBack,
                                              this,
-                                             QStringLiteral("Back; Alt+Left; Esc; Escape")));
+                                             ShortcutUtils::defaultNavigationBackShortcuts()));
 
-    auto *homeShortcutEdit = new QLineEdit(this);
+    auto *homeShortcutEdit = new ShortcutEdit(this);
     m_mainLayout->addWidget(new SettingsCard(":/svg/dark/home.svg",
                                              tr("Home Shortcut"),
                                              tr("Shortcut for returning to the home page"),
                                              homeShortcutEdit,
                                              ConfigKeys::ShortcutNavigationHome,
                                              this,
-                                             QStringLiteral("Ctrl+H")));
+                                             ShortcutUtils::defaultNavigationHomeShortcut()));
 
-    auto *favoritesShortcutEdit = new QLineEdit(this);
+    auto *favoritesShortcutEdit = new ShortcutEdit(this);
     m_mainLayout->addWidget(new SettingsCard(":/svg/dark/heart.svg",
                                              tr("Favorites Shortcut"),
                                              tr("Shortcut for opening favorites"),
                                              favoritesShortcutEdit,
                                              ConfigKeys::ShortcutNavigationFavorites,
                                              this,
-                                             QStringLiteral("Ctrl+Shift+F")));
+                                             ShortcutUtils::defaultNavigationFavoritesShortcut()));
 
-    auto *feedPrevShortcutEdit = new QLineEdit(this);
+    auto *feedPrevShortcutEdit = new ShortcutEdit(this);
     m_mainLayout->addWidget(new SettingsCard(":/svg/dark/arrow-left.svg",
                                              tr("Feed Previous Page"),
-                                             tr("Shortcut for scrolling the active home feed backward"),
+                                             tr("Shortcut for scrolling the active home feed left"),
                                              feedPrevShortcutEdit,
                                              ConfigKeys::ShortcutFeedPreviousPage,
                                              this,
-                                             QStringLiteral("PgUp; Page Up")));
+                                             ShortcutUtils::defaultFeedPreviousPageShortcuts()));
 
-    auto *feedNextShortcutEdit = new QLineEdit(this);
+    auto *feedNextShortcutEdit = new ShortcutEdit(this);
     m_mainLayout->addWidget(new SettingsCard(":/svg/dark/general.svg",
                                              tr("Feed Next Page"),
-                                             tr("Shortcut for scrolling the active home feed forward"),
+                                             tr("Shortcut for scrolling the active home feed right"),
                                              feedNextShortcutEdit,
                                              ConfigKeys::ShortcutFeedNextPage,
                                              this,
-                                             QStringLiteral("PgDown; Page Down")));
+                                             ShortcutUtils::defaultFeedNextPageShortcuts()));
 
     
     m_mainLayout->addStretch();

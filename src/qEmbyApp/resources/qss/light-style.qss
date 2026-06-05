@@ -1544,6 +1544,14 @@ QWidget#floating-sidebar[pinned="true"][sidebarSide="right"] {
     border-radius: 0px;
 }
 
+QWidget#sidebar-resize-handle {
+    background-color: transparent;
+}
+
+QWidget#sidebar-resize-handle:hover {
+    background-color: rgba(15, 23, 42, 0.12);
+}
+
 QWidget#floating-sidebar[pinned="true"] QLineEdit#sidebar-search {
     padding: 6px 8px;
 }

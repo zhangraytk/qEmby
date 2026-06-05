@@ -145,6 +145,9 @@ private:
     bool m_sidebarOnRight = false;
     bool m_sidebarPinned = false;
     bool m_sidebarPinnedApplied = false;
+    bool m_sidebarResizeDragging = false;
+    int m_sidebarResizeStartGlobalX = 0;
+    int m_sidebarResizeStartWidth = 0;
     QHBoxLayout* m_contentLayout = nullptr;
 
     QLabel* m_serverIconLabel = nullptr;
@@ -164,6 +167,7 @@ private:
     QWidget* m_searchSpacer = nullptr;
     QListWidget* m_libraryList = nullptr;
     SmoothScrollController* m_sidebarLibraryScrollController = nullptr;
+    QWidget* m_sidebarResizeHandle = nullptr;
 
     QLabel* m_userAvatarLabel = nullptr;
     QHBoxLayout* m_userInfoLayout = nullptr;

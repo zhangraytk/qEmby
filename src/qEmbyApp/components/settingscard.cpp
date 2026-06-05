@@ -2,6 +2,7 @@
 #include "elidedlabel.h"
 #include "modernswitch.h"
 #include "moderntaginput.h"
+#include "shortcutedit.h"
 #include "../managers/thememanager.h"
 #include <QComboBox>
 #include <QHBoxLayout>
@@ -146,6 +147,18 @@ void SettingsCard::setupDataBinding() {
   
   
   
+  else if (auto *shortcutEdit = qobject_cast<ShortcutEdit *>(m_controlWidget)) {
+    shortcutEdit->setText(store->get<QString>(m_configKey,
+                                              m_defaultValue.toString()));
+
+    connect(shortcutEdit, &ShortcutEdit::shortcutTextChanged, this,
+            [this, store](const QString &val) { store->set(m_configKey, val); });
+    connect(shortcutEdit, &QLineEdit::editingFinished, this,
+            [this, store, shortcutEdit]() {
+              store->set(m_configKey, shortcutEdit->text().trimmed());
+            });
+  }
+
   else if (auto *lineEdit = qobject_cast<QLineEdit *>(m_controlWidget)) {
     
     lineEdit->setText(store->get<QString>(m_configKey, m_defaultValue.toString()));

@@ -39,6 +39,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMargins>
+#include <QMouseEvent>
 #include <QPointer> 
 #include <QPropertyAnimation>
 #include <QPushButton>
@@ -63,6 +64,7 @@ constexpr int kMinPinnedSidebarWidth = 96;
 constexpr int kMaxPinnedSidebarWidth = 280;
 constexpr int kMinFloatingSidebarWidth = 180;
 constexpr int kMaxFloatingSidebarWidth = 420;
+constexpr int kSidebarResizeHandleWidth = 12;
 constexpr int kSidebarHiddenOffset = 30;
 constexpr int kLeftEdgeTriggerWidth = 15;
 constexpr int kRightEdgeTriggerWidth = 20;
@@ -621,6 +623,13 @@ void HomeView::setupSidebar()
     m_sidebar->setObjectName("floating-sidebar");
     m_sidebar->setProperty("sidebarSide", m_sidebarOnRight ? "right" : "left");
 
+    m_sidebarResizeHandle = new QWidget(m_sidebar);
+    m_sidebarResizeHandle->setObjectName("sidebar-resize-handle");
+    m_sidebarResizeHandle->setCursor(Qt::SplitHCursor);
+    m_sidebarResizeHandle->setAttribute(Qt::WA_TransparentForMouseEvents, false);
+    m_sidebarResizeHandle->installEventFilter(this);
+    m_sidebarResizeHandle->raise();
+
     
     if (!m_sidebarPinned)
     {
@@ -937,9 +946,7 @@ void HomeView::setupSidebar()
                          key == ConfigKeys::SidebarFloatingWidth)
                 {
                     applySidebarMetrics(m_sidebarPinned);
-                    if (!m_sidebarPinned) {
-                        syncSidebarVisibility();
-                    }
+                    syncSidebarVisibility();
                 }
                 else if (key == ConfigKeys::SidebarCustomEnabled ||
                          key == ConfigKeys::SidebarHideSearch ||
@@ -1573,6 +1580,14 @@ void HomeView::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
 
+    if (m_sidebar && m_sidebarResizeHandle)
+    {
+        const int handleX = m_sidebarOnRight ? 0 : m_sidebar->width() - kSidebarResizeHandleWidth;
+        m_sidebarResizeHandle->setGeometry(handleX, 0, kSidebarResizeHandleWidth,
+                                           qMax(1, m_sidebar->height()));
+        m_sidebarResizeHandle->raise();
+    }
+
     
     if (m_sidebarPinned)
         return;
@@ -1613,6 +1628,89 @@ void HomeView::resizeEvent(QResizeEvent *event)
 
 bool HomeView::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_sidebarResizeHandle && m_sidebar)
+    {
+        if (event->type() == QEvent::MouseButtonPress)
+        {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            if (mouseEvent->button() == Qt::LeftButton)
+            {
+                m_sidebarResizeDragging = true;
+                m_sidebarResizeStartGlobalX = mouseEvent->globalPosition().toPoint().x();
+                m_sidebarResizeStartWidth = m_sidebar->width();
+                m_sidebarResizeHandle->grabMouse();
+                return true;
+            }
+        }
+        else if (event->type() == QEvent::MouseMove && m_sidebarResizeDragging)
+        {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            const int delta = mouseEvent->globalPosition().toPoint().x() -
+                              m_sidebarResizeStartGlobalX;
+            const int signedDelta = m_sidebarOnRight ? -delta : delta;
+            const int minWidth = m_sidebarPinned ? kMinPinnedSidebarWidth
+                                                 : kMinFloatingSidebarWidth;
+            const int maxWidth = m_sidebarPinned ? kMaxPinnedSidebarWidth
+                                                 : kMaxFloatingSidebarWidth;
+            const int nextWidth = qBound(minWidth,
+                                         m_sidebarResizeStartWidth + signedDelta,
+                                         maxWidth);
+            m_sidebar->setMinimumWidth(nextWidth);
+            m_sidebar->setMaximumWidth(nextWidth);
+            m_sidebar->resize(nextWidth, qMax(1, m_sidebar->height()));
+            m_sidebar->updateGeometry();
+            if (m_sidebarResizeHandle)
+            {
+                const int handleX =
+                    m_sidebarOnRight ? 0 : nextWidth - kSidebarResizeHandleWidth;
+                m_sidebarResizeHandle->setGeometry(handleX, 0,
+                                                   kSidebarResizeHandleWidth,
+                                                   qMax(1, m_sidebar->height()));
+                m_sidebarResizeHandle->raise();
+            }
+            if (!m_sidebarPinned)
+            {
+                if (m_sidebarOnRight)
+                {
+                    m_sidebar->move(width() - nextWidth, 0);
+                }
+                else
+                {
+                    m_sidebar->move(0, 0);
+                }
+            }
+            else if (m_contentLayout)
+            {
+                m_contentLayout->invalidate();
+                m_contentLayout->activate();
+            }
+            return true;
+        }
+        else if ((event->type() == QEvent::MouseButtonRelease ||
+                  event->type() == QEvent::UngrabMouse) &&
+                 m_sidebarResizeDragging)
+        {
+            if (event->type() == QEvent::MouseButtonRelease)
+            {
+                auto *mouseEvent = static_cast<QMouseEvent *>(event);
+                if (mouseEvent->button() != Qt::LeftButton)
+                {
+                    return true;
+                }
+            }
+            m_sidebarResizeDragging = false;
+            if (event->type() == QEvent::MouseButtonRelease)
+            {
+                m_sidebarResizeHandle->releaseMouse();
+            }
+            const QString key = m_sidebarPinned
+                                    ? QString::fromLatin1(ConfigKeys::SidebarPinnedWidth)
+                                    : QString::fromLatin1(ConfigKeys::SidebarFloatingWidth);
+            ConfigStore::instance()->set(key, m_sidebar->width());
+            return true;
+        }
+    }
+
     if (m_libraryList && watched == m_libraryList->viewport() &&
         event->type() == QEvent::Wheel)
     {
@@ -1761,7 +1859,11 @@ void HomeView::applySidebarMetrics(bool pinned)
         return;
     }
 
-    m_sidebar->setFixedWidth(sidebarWidthForMode(pinned));
+    const int sidebarWidth = sidebarWidthForMode(pinned);
+    m_sidebar->setMinimumWidth(sidebarWidth);
+    m_sidebar->setMaximumWidth(sidebarWidth);
+    m_sidebar->resize(sidebarWidth, qMax(1, height()));
+    m_sidebar->updateGeometry();
 
     auto *layout = qobject_cast<QVBoxLayout *>(m_sidebar->layout());
     const int horizontalInset = pinned ? 12 : 16;
@@ -1889,6 +1991,21 @@ void HomeView::applySidebarMetrics(bool pinned)
         {
             m_userNameLabel->setToolTip(userName);
         }
+    }
+
+    if (m_sidebarResizeHandle)
+    {
+        const int handleX = m_sidebarOnRight ? 0 : sidebarWidth - kSidebarResizeHandleWidth;
+        m_sidebarResizeHandle->setGeometry(handleX, 0, kSidebarResizeHandleWidth,
+                                           qMax(1, m_sidebar->height()));
+        m_sidebarResizeHandle->raise();
+    }
+
+    if (m_sidebarPinned && m_contentLayout)
+    {
+        m_contentLayout->invalidate();
+        m_contentLayout->activate();
+        updateGeometry();
     }
 }
 
@@ -2023,6 +2140,7 @@ void HomeView::applySidebarPosition()
     m_sidebar->setProperty("sidebarSide", m_sidebarOnRight ? "right" : "left");
     m_sidebar->style()->unpolish(m_sidebar);
     m_sidebar->style()->polish(m_sidebar);
+    applySidebarMetrics(m_sidebarPinned);
 
     
     if (m_sidebarPinned)
