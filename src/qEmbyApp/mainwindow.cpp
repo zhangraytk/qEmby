@@ -11,6 +11,7 @@
 #include "config/configstore.h"    
 #include "config/config_keys.h"    
 #include "utils/contextmenuutils.h"
+#include "utils/shortcututils.h"
 #include <services/manager/servermanager.h>
 #include <QStackedWidget>
 #include <QDebug>
@@ -43,6 +44,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QDialog>
+#include <QKeySequence>
 
 #include <QWKWidgets/widgetwindowagent.h>
 #include <widgetframe/windowbar.h>
@@ -185,7 +187,6 @@ MainWindow::MainWindow(QWidget *parent)
     backButton->setObjectName(QStringLiteral("back-button"));
     backButton->setProperty("system-button", true);
     backButton->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    backButton->setShortcut(QKeySequence::Back);
     backButton->hide();
 
     auto homeButton = new QWK::WindowButton();
@@ -203,50 +204,14 @@ MainWindow::MainWindow(QWidget *parent)
     
     
     
-    connect(backButton, &QWK::WindowButton::clicked, this, [this]() {
-        if (m_viewStack->currentWidget() == m_homeView) {
-            if (m_homeView->canNavigateBack()) {
-                
-                m_homeView->navigateBack();
-                m_backClickTimer.invalidate(); 
-            } else if (m_homeView->canGoHome()) {
-                
-                m_homeView->goHome();
-                m_backClickTimer.invalidate();
-            } else {
-                
-                if (m_backClickTimer.isValid() && m_backClickTimer.elapsed() < 2000) {
-                    
-                    m_backClickTimer.invalidate(); 
-                    navigateToLogin(); 
-                } else {
-                    
-                    m_backClickTimer.start();
-                    ModernToast::showMessage(tr("Press Back again to logout"));
-                }
-            }
-        }
-    });
+    connect(backButton, &QWK::WindowButton::clicked, this,
+            [this]() { triggerBackNavigation(); });
 
-    connect(homeButton, &QWK::WindowButton::clicked, this, [this]() {
-        if (m_viewStack->currentWidget() == m_homeView) {
-            
-            if (!m_homeView->canGoHome()) {
-                ModernToast::showMessage(tr("Refreshing Home..."), 1000);
-            }
-            m_homeView->goHome();
-        }
-    });
+    connect(homeButton, &QWK::WindowButton::clicked, this,
+            [this]() { triggerHomeNavigation(); });
 
-    connect(favButton, &QWK::WindowButton::clicked, this, [this]() {
-        if (m_viewStack->currentWidget() == m_homeView) {
-            
-            if (!m_homeView->canGoFav()) {
-                ModernToast::showMessage(tr("Refreshing Favorites..."), 1000);
-            }
-            m_homeView->goFav();
-        }
-    });
+    connect(favButton, &QWK::WindowButton::clicked, this,
+            [this]() { triggerFavoritesNavigation(); });
 
     auto windowBar = new QWK::WindowBar();
 #if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
@@ -267,11 +232,7 @@ MainWindow::MainWindow(QWidget *parent)
     closeButton->hide();
 #endif
     windowBar->setTitleLabel(titleLabel);
-#if !defined(Q_OS_MACOS) && !defined(Q_OS_MAC)
-    windowBar->setBackButton(backButton);
-    windowBar->setHomeButton(homeButton);
-    windowBar->setFavButton(favButton);
-#endif
+    titleLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     windowBar->setHostWidget(this);
 
     
@@ -310,7 +271,7 @@ MainWindow::MainWindow(QWidget *parent)
 #if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
     auto *macTitlebarNavSpacer = new QWidget(centerContainer);
     macTitlebarNavSpacer->setObjectName("mac-titlebar-nav-spacer");
-    macTitlebarNavSpacer->setFixedWidth(150);
+    macTitlebarNavSpacer->setFixedWidth(216);
     macTitlebarNavSpacer->hide();
 
     auto *macTitlebarNav = new QWidget(centerContainer);
@@ -321,7 +282,7 @@ MainWindow::MainWindow(QWidget *parent)
     macTitlebarNavLayout->addWidget(backButton);
     macTitlebarNavLayout->addWidget(homeButton);
     macTitlebarNavLayout->addWidget(favButton);
-    macTitlebarNav->setFixedWidth(150);
+    macTitlebarNav->setFixedWidth(216);
     macTitlebarNav->hide();
 
     centerLayout->addWidget(macTitlebarNavSpacer);
@@ -335,22 +296,38 @@ MainWindow::MainWindow(QWidget *parent)
 #endif
     centerContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    windowBar->setCenterWidget(centerContainer);
+    if (auto *titlebarLayout = qobject_cast<QBoxLayout *>(windowBar->layout())) {
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_MAC)
+        titlebarLayout->insertWidget(1, backButton);
+        titlebarLayout->insertWidget(2, homeButton);
+        titlebarLayout->insertWidget(3, favButton);
+#endif
+        const int centerIndex = qMax(0, titlebarLayout->count() - 3);
+        titlebarLayout->insertWidget(centerIndex, centerContainer);
+    }
 
 
     agent->setTitleBar(windowBar);
 
     agent->setHitTestVisible(themeButton, true);
     agent->setHitTestVisible(m_globalSearchBox, true); 
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_MAC)
+    agent->setHitTestVisible(backButton, true);
+    agent->setHitTestVisible(homeButton, true);
+    agent->setHitTestVisible(favButton, true);
+#endif
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    agent->setHitTestVisible(macTitlebarNav, true);
+    agent->setHitTestVisible(backButton, true);
+    agent->setHitTestVisible(homeButton, true);
+    agent->setHitTestVisible(favButton, true);
+#endif
     agent->setSystemButton(QWK::WindowAgentBase::WindowIcon, iconButton);
 #if !defined(Q_OS_MACOS) && !defined(Q_OS_MAC)
     agent->setSystemButton(QWK::WindowAgentBase::Minimize, minButton);
     agent->setSystemButton(QWK::WindowAgentBase::Maximize, maxButton);
     agent->setSystemButton(QWK::WindowAgentBase::Close, closeButton);
 #endif
-    agent->setSystemButton(QWK::WindowAgentBase::Back, backButton);
-    agent->setSystemButton(QWK::WindowAgentBase::Home, homeButton);
-    agent->setSystemButton(QWK::WindowAgentBase::Fav, favButton);
 #if defined(Q_OS_MAC)
     agent->setSystemButtonAreaCallback([](const QSize &size) {
         return QRect(QPoint(0, 0), QSize(80, size.height()));
@@ -714,6 +691,121 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 MainWindow::~MainWindow() {}
+
+bool MainWindow::triggerBackNavigation()
+{
+    if (!m_viewStack || !m_homeView || m_viewStack->currentWidget() != m_homeView) {
+        return false;
+    }
+
+    if (m_homeView->canNavigateBack()) {
+        m_homeView->navigateBack();
+        m_backClickTimer.invalidate();
+        return true;
+    }
+
+    if (m_homeView->canGoHome()) {
+        m_homeView->goHome();
+        m_backClickTimer.invalidate();
+        return true;
+    }
+
+    if (m_backClickTimer.isValid() && m_backClickTimer.elapsed() < 2000) {
+        m_backClickTimer.invalidate();
+        navigateToLogin();
+    } else {
+        m_backClickTimer.start();
+        ModernToast::showMessage(tr("Press Back again to logout"));
+    }
+    return true;
+}
+
+void MainWindow::triggerHomeNavigation()
+{
+    if (!m_viewStack || !m_homeView || m_viewStack->currentWidget() != m_homeView) {
+        return;
+    }
+
+    if (!m_homeView->canGoHome()) {
+        ModernToast::showMessage(tr("Refreshing Home..."), 1000);
+    }
+    m_homeView->goHome();
+}
+
+void MainWindow::triggerFavoritesNavigation()
+{
+    if (!m_viewStack || !m_homeView || m_viewStack->currentWidget() != m_homeView) {
+        return;
+    }
+
+    if (!m_homeView->canGoFav()) {
+        ModernToast::showMessage(tr("Refreshing Favorites..."), 1000);
+    }
+    m_homeView->goFav();
+}
+
+bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
+{
+    if (!event || event->isAutoRepeat()) {
+        return false;
+    }
+    if (!m_viewStack || !m_homeView || m_viewStack->currentWidget() != m_homeView) {
+        return false;
+    }
+    QWidget* focusWidget = QApplication::focusWidget();
+    if (QApplication::activeModalWidget() ||
+        QApplication::activePopupWidget() ||
+        qobject_cast<QLineEdit*>(focusWidget) ||
+        (focusWidget && (focusWidget->inherits("QTextEdit") ||
+                         focusWidget->inherits("QPlainTextEdit") ||
+                         focusWidget->inherits("QAbstractSpinBox") ||
+                         focusWidget->inherits("QComboBox")))) {
+        return false;
+    }
+
+    const QKeySequence sequence = ShortcutUtils::fromKeyEvent(event);
+    if (sequence.isEmpty()) {
+        return false;
+    }
+
+    if (m_homeView->activePlayerView()) {
+        return false;
+    }
+
+    if (m_homeView->triggerDashboardFeedShortcut(sequence)) {
+        return true;
+    }
+
+    if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationBack,
+                        QStringLiteral("Back; Alt+Left; Esc; Escape"))) {
+        return triggerBackNavigation();
+    }
+    if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationHome,
+                        QStringLiteral("Ctrl+H"))) {
+        triggerHomeNavigation();
+        return true;
+    }
+    if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationFavorites,
+                        QStringLiteral("Ctrl+Shift+F"))) {
+        triggerFavoritesNavigation();
+        return true;
+    }
+
+    return false;
+}
+
+bool MainWindow::matchesShortcut(const QKeySequence& sequence,
+                                 const QString& configKey,
+                                 const QString& defaultValue) const
+{
+    if (sequence.isEmpty()) {
+        return false;
+    }
+
+    const QString stored =
+        ConfigStore::instance()->get<QString>(configKey, defaultValue);
+    return ShortcutUtils::matchesShortcutList(sequence, stored);
+}
 
 void MainWindow::setupGlobalSearchHistory()
 {
@@ -1187,6 +1279,13 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             }
         } else if (event->type() == QEvent::Hide) {
             hideGlobalSearchTransientUi();
+        }
+    }
+
+    if (event->type() == QEvent::KeyPress) {
+        auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (handleConfiguredShortcut(keyEvent)) {
+            return true;
         }
     }
 

@@ -46,6 +46,8 @@ public:
     void setContentPadding(int padding);
     void setHoverControls(MediaCardDelegate::HoverControls controls);
     void scrollToItemId(const QString &itemId);
+    void scrollPreviousPage();
+    void scrollNextPage();
 
     
     void setHighlightedItemId(const QString &id);
@@ -70,6 +72,7 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
+    void scrollPage(int directionMultiplier);
     void updateButtonsVisibility();
     void updateButtonPositions();
     void updateVisibleImagePriority();

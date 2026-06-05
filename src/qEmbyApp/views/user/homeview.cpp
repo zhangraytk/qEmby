@@ -34,6 +34,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
 #include <QHideEvent>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -58,6 +59,10 @@ namespace
 {
 constexpr int kFloatingSidebarWidth = 240;
 constexpr int kPinnedSidebarWidth = 136;
+constexpr int kMinPinnedSidebarWidth = 96;
+constexpr int kMaxPinnedSidebarWidth = 280;
+constexpr int kMinFloatingSidebarWidth = 180;
+constexpr int kMaxFloatingSidebarWidth = 420;
 constexpr int kSidebarHiddenOffset = 30;
 constexpr int kLeftEdgeTriggerWidth = 15;
 constexpr int kRightEdgeTriggerWidth = 20;
@@ -132,6 +137,15 @@ PlayerView *HomeView::activePlayerView() const
         return qobject_cast<PlayerView *>(current);
     }
     return nullptr;
+}
+
+bool HomeView::triggerDashboardFeedShortcut(const QKeySequence& sequence)
+{
+    if (!m_dashboardView || !m_contentSwitcher ||
+        m_contentSwitcher->currentWidget() != m_dashboardView) {
+        return false;
+    }
+    return m_dashboardView->triggerFeedShortcut(sequence);
 }
 
 void HomeView::setupUi()
@@ -918,6 +932,14 @@ void HomeView::setupSidebar()
                     bool pinned = value.toBool();
                     m_sidebarPinned = pinned;
                     applySidebarPinned(pinned);
+                }
+                else if (key == ConfigKeys::SidebarPinnedWidth ||
+                         key == ConfigKeys::SidebarFloatingWidth)
+                {
+                    applySidebarMetrics(m_sidebarPinned);
+                    if (!m_sidebarPinned) {
+                        syncSidebarVisibility();
+                    }
                 }
                 else if (key == ConfigKeys::SidebarCustomEnabled ||
                          key == ConfigKeys::SidebarHideSearch ||
@@ -1721,7 +1743,15 @@ bool HomeView::isCurrentViewImmersive() const
 
 int HomeView::sidebarWidthForMode(bool pinned) const
 {
-    return pinned ? kPinnedSidebarWidth : kFloatingSidebarWidth;
+    if (pinned) {
+        const int width = ConfigStore::instance()->get<int>(
+            ConfigKeys::SidebarPinnedWidth, kPinnedSidebarWidth);
+        return qBound(kMinPinnedSidebarWidth, width, kMaxPinnedSidebarWidth);
+    }
+
+    const int width = ConfigStore::instance()->get<int>(
+        ConfigKeys::SidebarFloatingWidth, kFloatingSidebarWidth);
+    return qBound(kMinFloatingSidebarWidth, width, kMaxFloatingSidebarWidth);
 }
 
 void HomeView::applySidebarMetrics(bool pinned)

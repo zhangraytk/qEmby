@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QElapsedTimer> 
 #include <QCloseEvent>   
+#include <QKeySequence>
 
 class QEmbyCore;
 class LoginView;
@@ -11,6 +12,7 @@ class HomeView;
 class QStackedWidget;
 class QLineEdit;
 class QCompleter;
+class QKeyEvent;
 class QStringListModel;
 class TrayManager;       
 class SearchHistoryPopup;
@@ -32,6 +34,13 @@ protected:
     void closeEvent(QCloseEvent *event) override; 
 
 private:
+    bool triggerBackNavigation();
+    void triggerHomeNavigation();
+    void triggerFavoritesNavigation();
+    bool handleConfiguredShortcut(QKeyEvent *event);
+    bool matchesShortcut(const QKeySequence& sequence,
+                         const QString& configKey,
+                         const QString& defaultValue) const;
     void setupGlobalSearchHistory();
     void hideGlobalSearchTransientUi();
     void updateGlobalSearchCompleter(const QString &text = QString());

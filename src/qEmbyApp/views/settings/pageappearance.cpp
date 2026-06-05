@@ -1,6 +1,7 @@
 #include "pageappearance.h"
 #include "../../components/moderncombobox.h"
 #include "../../components/modernmessagebox.h"
+#include "../../components/modernnumberinput.h"
 #include "../../components/moderntoast.h"
 #include "../../components/modernswitch.h"
 #include "../../components/settingscard.h"
@@ -9,6 +10,7 @@
 #include "config/config_keys.h"
 #include "config/configstore.h"
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 
 PageAppearance::PageAppearance(QEmbyCore *core, QWidget *parent) : SettingsPageBase(core, tr("Appearance"), parent)
@@ -44,6 +46,28 @@ PageAppearance::PageAppearance(QEmbyCore *core, QWidget *parent) : SettingsPageB
     m_mainLayout->addWidget(new SettingsCard(":/svg/dark/appearance-sidebar-pin.svg", tr("Pin Sidebar"),
                                              tr("Keep the sidebar always visible and integrated into the main layout"),
                                              new ModernSwitch(this), ConfigKeys::SidebarPinned, this));
+
+    auto *pinnedWidthSpin = new ModernNumberInput(this);
+    pinnedWidthSpin->setRange(96, 280);
+    pinnedWidthSpin->setSingleStep(4);
+    pinnedWidthSpin->setSuffix(QStringLiteral(" px"));
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/appearance-sidebar.svg",
+                                             tr("Pinned Sidebar Width"),
+                                             tr("Width of the sidebar when it is pinned"),
+                                             pinnedWidthSpin,
+                                             ConfigKeys::SidebarPinnedWidth,
+                                             this, QVariant(136)));
+
+    auto *floatingWidthSpin = new ModernNumberInput(this);
+    floatingWidthSpin->setRange(180, 420);
+    floatingWidthSpin->setSingleStep(8);
+    floatingWidthSpin->setSuffix(QStringLiteral(" px"));
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/appearance-sidebar.svg",
+                                             tr("Floating Sidebar Width"),
+                                             tr("Width of the sidebar when it slides over the content"),
+                                             floatingWidthSpin,
+                                             ConfigKeys::SidebarFloatingWidth,
+                                             this, QVariant(240)));
 
     
     auto *customSidebarSwitch = new ModernSwitch(this);
@@ -173,6 +197,51 @@ PageAppearance::PageAppearance(QEmbyCore *core, QWidget *parent) : SettingsPageB
             SearchHistoryManager::instance()->clearAllHistory();
             ModernToast::showMessage(tr("Search history cleared"), 1500);
         });
+
+    auto *backShortcutEdit = new QLineEdit(this);
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/general.svg",
+                                             tr("Back Shortcut"),
+                                             tr("Separate multiple shortcuts with semicolons"),
+                                             backShortcutEdit,
+                                             ConfigKeys::ShortcutNavigationBack,
+                                             this,
+                                             QStringLiteral("Back; Alt+Left; Esc; Escape")));
+
+    auto *homeShortcutEdit = new QLineEdit(this);
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/home.svg",
+                                             tr("Home Shortcut"),
+                                             tr("Shortcut for returning to the home page"),
+                                             homeShortcutEdit,
+                                             ConfigKeys::ShortcutNavigationHome,
+                                             this,
+                                             QStringLiteral("Ctrl+H")));
+
+    auto *favoritesShortcutEdit = new QLineEdit(this);
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/heart.svg",
+                                             tr("Favorites Shortcut"),
+                                             tr("Shortcut for opening favorites"),
+                                             favoritesShortcutEdit,
+                                             ConfigKeys::ShortcutNavigationFavorites,
+                                             this,
+                                             QStringLiteral("Ctrl+Shift+F")));
+
+    auto *feedPrevShortcutEdit = new QLineEdit(this);
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/arrow-left.svg",
+                                             tr("Feed Previous Page"),
+                                             tr("Shortcut for scrolling the active home feed backward"),
+                                             feedPrevShortcutEdit,
+                                             ConfigKeys::ShortcutFeedPreviousPage,
+                                             this,
+                                             QStringLiteral("PgUp; Page Up")));
+
+    auto *feedNextShortcutEdit = new QLineEdit(this);
+    m_mainLayout->addWidget(new SettingsCard(":/svg/dark/general.svg",
+                                             tr("Feed Next Page"),
+                                             tr("Shortcut for scrolling the active home feed forward"),
+                                             feedNextShortcutEdit,
+                                             ConfigKeys::ShortcutFeedNextPage,
+                                             this,
+                                             QStringLiteral("PgDown; Page Down")));
 
     
     m_mainLayout->addStretch();

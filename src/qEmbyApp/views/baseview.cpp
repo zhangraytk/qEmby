@@ -75,6 +75,24 @@ QCoro::Task<MediaItem> BaseView::resolvePlaybackItem(MediaItem item)
     QPointer<BaseView> safeThis(this);
     MediaItem detail = item;
 
+    const QString resumeItemId = detail.resumeItemId.trimmed();
+    if (detail.hasResumeContext && !resumeItemId.isEmpty() &&
+        resumeItemId != detail.id) {
+        MediaItem resumeDetail =
+            co_await m_core->mediaService()->getItemDetail(resumeItemId);
+        if (!safeThis) {
+            co_return {};
+        }
+
+        if (!resumeDetail.id.isEmpty()) {
+            if (resumeDetail.userData.playbackPositionTicks <= 0 &&
+                detail.resumeUserData.playbackPositionTicks > 0) {
+                resumeDetail.userData = detail.resumeUserData;
+            }
+            detail = resumeDetail;
+        }
+    }
+
     if (detail.type == "Series") {
         QList<MediaItem> nextUpList =
             co_await m_core->mediaService()->getNextUp(detail.id);

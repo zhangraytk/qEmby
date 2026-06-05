@@ -15,6 +15,7 @@ class QScrollArea;
 class HorizontalListViewGallery;
 class MediaSectionWidget;
 class SmoothScrollController;
+class QKeySequence;
 
 class DashboardView : public BaseView
 {
@@ -24,6 +25,7 @@ public:
     
     
     QCoro::Task<void> loadDashboardData();
+    bool triggerFeedShortcut(const QKeySequence& sequence);
 
 public Q_SLOTS:
     void scrollToTop() override;
@@ -65,6 +67,8 @@ private:
     void resetListViewScrollPosition(QListView* listView) const;
     bool isManageableDashboardLibraryCard(const MediaItem& item) const;
     void openDashboardLibraryImageEditor(const MediaItem& item);
+    HorizontalListViewGallery* activeFeedGallery() const;
+    HorizontalListViewGallery* galleryForObject(QObject* obj) const;
 
     
     QWidget* createSectionHeader(const QString& title, const QString& type);

@@ -8,14 +8,17 @@
 #include "../../utils/dashboardrequestlimitutils.h"
 #include "../../utils/dashboardsectionorderutils.h"
 #include "../../utils/mediaitemutils.h"
+#include "../../utils/shortcututils.h"
 #include "../../utils/smoothscrollcontroller.h"
 #include "../../utils/textwraputils.h"
 #include "../media/mediacarddelegate.h"
 #include "../media/medialistmodel.h"
 #include <QApplication>
+#include <QCursor>
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QKeySequence>
 #include <QListView>
 #include <QPointer>
 #include <QPushButton>
@@ -589,6 +592,153 @@ bool DashboardView::eventFilter(QObject* obj, QEvent* event)
     }
 
     return QWidget::eventFilter(obj, event);
+}
+
+bool DashboardView::triggerFeedShortcut(const QKeySequence& sequence)
+{
+    if (sequence.isEmpty()) {
+        return false;
+    }
+
+    const QString previous = ConfigStore::instance()->get<QString>(
+        ConfigKeys::ShortcutFeedPreviousPage,
+        QStringLiteral("PgUp; Page Up"));
+    const QString next = ConfigStore::instance()->get<QString>(
+        ConfigKeys::ShortcutFeedNextPage,
+        QStringLiteral("PgDown; Page Down"));
+
+    HorizontalListViewGallery* gallery = activeFeedGallery();
+    if (!gallery) {
+        return false;
+    }
+
+    if (ShortcutUtils::matchesShortcutList(sequence, previous)) {
+        gallery->scrollPreviousPage();
+        return true;
+    }
+    if (ShortcutUtils::matchesShortcutList(sequence, next)) {
+        gallery->scrollNextPage();
+        return true;
+    }
+
+    return false;
+}
+
+HorizontalListViewGallery* DashboardView::activeFeedGallery() const
+{
+    QWidget* focused = QApplication::focusWidget();
+    while (focused) {
+        if (auto* gallery = qobject_cast<HorizontalListViewGallery*>(focused)) {
+            return gallery;
+        }
+        if (auto* gallery = galleryForObject(focused)) {
+            return gallery;
+        }
+        focused = focused->parentWidget();
+    }
+
+    const QPoint globalPos = QCursor::pos();
+    const QList<HorizontalListViewGallery*> galleries = {
+        m_resumeGallery,
+        m_latestGallery,
+        m_recommendGallery,
+        m_completedGallery,
+    };
+    for (HorizontalListViewGallery* gallery : galleries) {
+        if (!gallery || !gallery->isVisible()) {
+            continue;
+        }
+        const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+        if (rect.contains(globalPos)) {
+            return gallery;
+        }
+    }
+
+    for (MediaSectionWidget* section : m_libraryGalleries) {
+        if (!section || !section->gallery() ||
+            !section->gallery()->isVisible()) {
+            continue;
+        }
+        HorizontalListViewGallery* gallery = section->gallery();
+        const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+        if (rect.contains(globalPos)) {
+            return gallery;
+        }
+    }
+
+    QWidget* viewport = m_mainScrollArea ? m_mainScrollArea->viewport() : nullptr;
+    if (viewport) {
+        const QRect viewportRect(viewport->mapToGlobal(QPoint(0, 0)),
+                                 viewport->size());
+        for (HorizontalListViewGallery* gallery : galleries) {
+            if (!gallery || !gallery->isVisible()) {
+                continue;
+            }
+            const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+            if (viewportRect.intersects(rect)) {
+                return gallery;
+            }
+        }
+
+        for (MediaSectionWidget* section : m_libraryGalleries) {
+            if (!section || !section->gallery() ||
+                !section->gallery()->isVisible()) {
+                continue;
+            }
+            HorizontalListViewGallery* gallery = section->gallery();
+            const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+            if (viewportRect.intersects(rect)) {
+                return gallery;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+HorizontalListViewGallery* DashboardView::galleryForObject(QObject* obj) const
+{
+    if (!obj) {
+        return nullptr;
+    }
+
+    QWidget* widget = qobject_cast<QWidget*>(obj);
+    const QList<HorizontalListViewGallery*> galleries = {
+        m_resumeGallery,
+        m_latestGallery,
+        m_recommendGallery,
+        m_completedGallery,
+    };
+    for (HorizontalListViewGallery* gallery : galleries) {
+        if (!gallery) {
+            continue;
+        }
+        if (obj == gallery || (widget && gallery->isAncestorOf(widget))) {
+            return gallery;
+        }
+        if (gallery->listView() &&
+            (obj == gallery->listView() ||
+             obj == gallery->listView()->viewport())) {
+            return gallery;
+        }
+    }
+
+    for (MediaSectionWidget* section : m_libraryGalleries) {
+        if (!section || !section->gallery()) {
+            continue;
+        }
+        HorizontalListViewGallery* gallery = section->gallery();
+        if (obj == gallery || (widget && gallery->isAncestorOf(widget))) {
+            return gallery;
+        }
+        if (gallery->listView() &&
+            (obj == gallery->listView() ||
+             obj == gallery->listView()->viewport())) {
+            return gallery;
+        }
+    }
+
+    return nullptr;
 }
 
 void DashboardView::adjustLibraryGridHeight()

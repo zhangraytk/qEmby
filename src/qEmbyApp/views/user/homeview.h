@@ -19,6 +19,7 @@ class QAction;
 class QLineEdit;
 class QListWidget;
 class QCompleter;
+class QKeySequence;
 class QStringListModel;
 class ElidedLabel;
 class QBoxLayout;
@@ -65,6 +66,7 @@ public:
 
     
     PlayerView* activePlayerView() const;
+    bool triggerDashboardFeedShortcut(const QKeySequence& sequence);
 
 public Q_SLOTS:
     

@@ -116,22 +116,10 @@ HorizontalListViewGallery::HorizontalListViewGallery(QEmbyCore* core, QWidget* p
     m_btnLeft->hide();
     m_btnRight->hide();
 
-    auto scrollAction = [this](int directionMultiplier) {
-        QScrollBar* bar = m_listView->horizontalScrollBar();
-        int step = this->width() / 2;
-        int targetValue = bar->value() + directionMultiplier * step;
-        targetValue = qBound(0, targetValue, bar->maximum());
-
-        auto* anim = new QPropertyAnimation(bar, "value", this);
-        anim->setDuration(400);
-        anim->setEasingCurve(QEasingCurve::OutCubic);
-        anim->setStartValue(bar->value());
-        anim->setEndValue(targetValue);
-        anim->start(QAbstractAnimation::DeleteWhenStopped);
-    };
-
-    connect(m_btnLeft, &QPushButton::clicked, [scrollAction]() { scrollAction(-1); });
-    connect(m_btnRight, &QPushButton::clicked, [scrollAction]() { scrollAction(1); });
+    connect(m_btnLeft, &QPushButton::clicked,
+            this, &HorizontalListViewGallery::scrollPreviousPage);
+    connect(m_btnRight, &QPushButton::clicked,
+            this, &HorizontalListViewGallery::scrollNextPage);
 
     connect(m_listView->horizontalScrollBar(), &QScrollBar::valueChanged, this,
             [this]() {
@@ -342,6 +330,47 @@ void HorizontalListViewGallery::setHighlightedItemId(const QString &id)
         m_listDelegate->setHighlightedItemId(id);
         m_listView->viewport()->update();
     }
+}
+
+void HorizontalListViewGallery::scrollPreviousPage()
+{
+    scrollPage(-1);
+}
+
+void HorizontalListViewGallery::scrollNextPage()
+{
+    scrollPage(1);
+}
+
+void HorizontalListViewGallery::scrollPage(int directionMultiplier)
+{
+    if (!m_listView || !m_hScrollAnim || !m_hScrollAnim->targetObject()) {
+        return;
+    }
+
+    QScrollBar* bar = m_listView->horizontalScrollBar();
+    if (!bar || bar->maximum() <= 0) {
+        return;
+    }
+
+    int currentValue = bar->value();
+    if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
+        currentValue = m_hScrollTarget;
+    }
+
+    const int step = qMax(1, width() / 2);
+    const int targetValue =
+        qBound(bar->minimum(), currentValue + directionMultiplier * step,
+               bar->maximum());
+    if (targetValue == currentValue) {
+        return;
+    }
+
+    m_hScrollTarget = targetValue;
+    m_hScrollAnim->stop();
+    m_hScrollAnim->setStartValue(bar->value());
+    m_hScrollAnim->setEndValue(m_hScrollTarget);
+    m_hScrollAnim->start();
 }
 
 void HorizontalListViewGallery::setLoading(bool loading)

@@ -58,11 +58,22 @@ constexpr const char* SidebarCustomEnabled = "appearance/sidebar_custom_enabled"
 constexpr const char* SidebarHideSearch = "appearance/sidebar_hide_search";
 constexpr const char* SidebarHideHome = "appearance/sidebar_hide_home";
 constexpr const char* SidebarHideFavorites = "appearance/sidebar_hide_favorites";
+constexpr const char* SidebarPinnedWidth = "appearance/sidebar_pinned_width";
+constexpr const char* SidebarFloatingWidth = "appearance/sidebar_floating_width";
 constexpr const char* StartupWindowState = "appearance/startup_window_state";
 constexpr const char* UiAnimations = "appearance/ui_animations";
 constexpr const char* SnapshotNavigation = "appearance/snapshot_navigation";
 constexpr const char* SearchHistoryEnabled = "appearance/search_history_enabled";
 constexpr const char* SearchAutocompleteEnabled = "appearance/search_autocomplete_enabled";
+
+
+constexpr const char* ShortcutNavigationBack = "shortcuts/navigation_back";
+constexpr const char* ShortcutNavigationHome = "shortcuts/navigation_home";
+constexpr const char* ShortcutNavigationFavorites =
+    "shortcuts/navigation_favorites";
+constexpr const char* ShortcutFeedPreviousPage =
+    "shortcuts/feed_previous_page";
+constexpr const char* ShortcutFeedNextPage = "shortcuts/feed_next_page";
 constexpr const char* ShowRecommended = "library/show_recommended";
 constexpr const char* ShowContinueWatching = "library/show_continue_watching";
 constexpr const char* ShowLatestAdded = "library/show_latest_added";
