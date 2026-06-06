@@ -1963,6 +1963,10 @@ Choose a file, paste an image URL, or drag one onto the preview.</source>
         <translation> 外观</translation>
     </message>
     <message>
+        <source> Controls</source>
+        <translation> 控制</translation>
+    </message>
+    <message>
         <source> Player</source>
         <translation> 播放器</translation>
     </message>
@@ -2711,6 +2715,22 @@ This will remove the current log and rotated backups. This action cannot be undo
         <translation>始终显示侧边栏并将其融入主界面布局</translation>
     </message>
     <message>
+        <source>Pinned Sidebar Width</source>
+        <translation>固定侧边栏宽度</translation>
+    </message>
+    <message>
+        <source>Width of the sidebar when it is pinned</source>
+        <translation>侧边栏固定显示时的宽度</translation>
+    </message>
+    <message>
+        <source>Floating Sidebar Width</source>
+        <translation>浮动侧边栏宽度</translation>
+    </message>
+    <message>
+        <source>Width of the sidebar when it slides over the content</source>
+        <translation>侧边栏浮动覆盖内容时的宽度</translation>
+    </message>
+    <message>
         <source>Custom Sidebar</source>
         <translation>自定义侧边栏</translation>
     </message>
@@ -2805,6 +2825,62 @@ This action cannot be undone.</source>
     <message>
         <source>Save recent searches locally and offer autocomplete in search boxes</source>
         <translation>在本地保存最近搜索，并在搜索框中提供自动补全</translation>
+    </message>
+</context>
+
+<context>
+    <name>PageControls</name>
+    <message>
+        <source>Controls</source>
+        <translation>控制</translation>
+    </message>
+    <message>
+        <source>Back Shortcut</source>
+        <translation>返回快捷键</translation>
+    </message>
+    <message>
+        <source>Click and press a shortcut; paste semicolon-separated alternatives if needed</source>
+        <translation>点击后按下快捷键；如需多个备选快捷键，可粘贴用分号分隔的列表</translation>
+    </message>
+    <message>
+        <source>Home Shortcut</source>
+        <translation>主页快捷键</translation>
+    </message>
+    <message>
+        <source>Shortcut for returning to the home page</source>
+        <translation>返回主页的快捷键</translation>
+    </message>
+    <message>
+        <source>Favorites Shortcut</source>
+        <translation>收藏快捷键</translation>
+    </message>
+    <message>
+        <source>Shortcut for opening favorites</source>
+        <translation>打开收藏页的快捷键</translation>
+    </message>
+    <message>
+        <source>Feed Previous Page</source>
+        <translation>信息流上一页</translation>
+    </message>
+    <message>
+        <source>Shortcut for scrolling the active home feed left</source>
+        <translation>向左滚动当前主页信息流的快捷键</translation>
+    </message>
+    <message>
+        <source>Feed Next Page</source>
+        <translation>信息流下一页</translation>
+    </message>
+    <message>
+        <source>Shortcut for scrolling the active home feed right</source>
+        <translation>向右滚动当前主页信息流的快捷键</translation>
+    </message>
+    <message>
+        <source>Remote Focus Navigation</source>
+        <translation>遥控器焦点导航</translation>
+    </message>
+    <message>
+        <source>Arrow keys move focus across home feeds; Enter, Space, or Select opens the focused card</source>
+        <translation>方向键可在主页信息流之间移动焦点；Enter、空格或 Select 打开当前焦点卡片</translation>
     </message>
 </context>
 

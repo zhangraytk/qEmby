@@ -26,6 +26,7 @@ public:
     
     QCoro::Task<void> loadDashboardData();
     bool triggerFeedShortcut(const QKeySequence& sequence);
+    bool handleRemoteNavigationKey(int key);
 
 public Q_SLOTS:
     void scrollToTop() override;
@@ -67,8 +68,10 @@ private:
     void resetListViewScrollPosition(QListView* listView) const;
     bool isManageableDashboardLibraryCard(const MediaItem& item) const;
     void openDashboardLibraryImageEditor(const MediaItem& item);
+    QList<HorizontalListViewGallery*> visibleFeedGalleries() const;
     HorizontalListViewGallery* activeFeedGallery() const;
     HorizontalListViewGallery* galleryForObject(QObject* obj) const;
+    void clearFeedKeyboardFocuses();
 
     
     QWidget* createSectionHeader(const QString& title, const QString& type);

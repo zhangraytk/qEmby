@@ -150,6 +150,23 @@ bool HomeView::triggerDashboardFeedShortcut(const QKeySequence& sequence)
     return m_dashboardView->triggerFeedShortcut(sequence);
 }
 
+bool HomeView::handleRemoteNavigationKey(int key)
+{
+    if (!m_contentSwitcher) {
+        return false;
+    }
+
+    QWidget* current = m_contentSwitcher->currentWidget();
+    if (current == m_dashboardView && m_dashboardView) {
+        return m_dashboardView->handleRemoteNavigationKey(key);
+    }
+    if (current == m_favoritesView && m_favoritesView) {
+        return m_favoritesView->handleRemoteNavigationKey(key);
+    }
+
+    return false;
+}
+
 void HomeView::setupUi()
 {
     this->setProperty("showGlobalSearch", true);

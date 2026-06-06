@@ -18,6 +18,31 @@
 #include <QSet>
 #include <algorithm>
 
+namespace
+{
+
+QPoint effectiveWheelDelta(QWheelEvent* event)
+{
+    if (!event) {
+        return {};
+    }
+
+    const QPoint pixelDelta = event->pixelDelta();
+    if (!pixelDelta.isNull()) {
+        return pixelDelta;
+    }
+
+    return event->angleDelta();
+}
+
+bool isDominantHorizontalWheel(QWheelEvent* event)
+{
+    const QPoint delta = effectiveWheelDelta(event);
+    return qAbs(delta.x()) > qAbs(delta.y());
+}
+
+}
+
 HorizontalListViewGallery::HorizontalListViewGallery(QEmbyCore* core, QWidget* parent)
     : QWidget(parent), m_core(core), m_hScrollAnim(nullptr), m_hScrollTarget(0), m_cardStyle(MediaCardDelegate::Poster)
 {
@@ -44,7 +69,8 @@ HorizontalListViewGallery::HorizontalListViewGallery(QEmbyCore* core, QWidget* p
     m_listView->setMouseTracking(true);
     m_listView->viewport()->setAttribute(Qt::WA_Hover);
     m_listView->setStyleSheet("QListView { background: transparent; outline: none; border: none; }");
-    m_listView->setSelectionMode(QAbstractItemView::NoSelection);
+    m_listView->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_listView->setFocusPolicy(Qt::NoFocus);
 
     
     
@@ -90,6 +116,7 @@ HorizontalListViewGallery::HorizontalListViewGallery(QEmbyCore* core, QWidget* p
 
     
     connect(m_listView, &QListView::clicked, this, [this](const QModelIndex& index) {
+        clearKeyboardFocus();
         if (m_listModel) {
             Q_EMIT itemClicked(m_listModel->getItem(index));
         }
@@ -149,6 +176,11 @@ void HorizontalListViewGallery::setItems(const QList<MediaItem>& items)
 {
     if (m_listModel) {
         m_listModel->setItems(items);
+        if (m_keyboardFocusRow >= m_listModel->rowCount()) {
+            clearKeyboardFocus();
+        } else if (m_keyboardFocusActive) {
+            setKeyboardFocusRow(m_keyboardFocusRow, false);
+        }
         QTimer::singleShot(0, this,
                            [this]() { updateVisibleImagePriority(); });
     }
@@ -185,6 +217,9 @@ void HorizontalListViewGallery::removeItem(const QString& itemId)
     if (m_listModel) {
         const int previousCount = m_listModel->rowCount();
         m_listModel->removeItem(itemId);
+        if (m_keyboardFocusRow >= m_listModel->rowCount()) {
+            clearKeyboardFocus();
+        }
         if (m_listView && m_listModel->rowCount() < previousCount) {
             m_listView->doItemsLayout();
             m_listView->updateGeometry();
@@ -342,6 +377,136 @@ void HorizontalListViewGallery::scrollNextPage()
     scrollPage(1);
 }
 
+bool HorizontalListViewGallery::handleHorizontalWheel(QWheelEvent* event)
+{
+    if (!event || !isDominantHorizontalWheel(event)) {
+        if (event) {
+            event->ignore();
+        }
+        return false;
+    }
+
+    clearKeyboardFocus();
+
+    if (!m_listView || !m_hScrollAnim || !m_hScrollAnim->targetObject()) {
+        event->ignore();
+        return false;
+    }
+
+    QScrollBar* hBar = m_listView->horizontalScrollBar();
+    if (!hBar) {
+        event->ignore();
+        return false;
+    }
+
+    int currentVal = hBar->value();
+    if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
+        currentVal = m_hScrollTarget;
+    }
+
+    const int step = effectiveWheelDelta(event).x();
+    const int newTarget =
+        qBound(hBar->minimum(), currentVal - step, hBar->maximum());
+    if (newTarget != hBar->value()) {
+        m_hScrollTarget = newTarget;
+        m_hScrollAnim->stop();
+        m_hScrollAnim->setStartValue(hBar->value());
+        m_hScrollAnim->setEndValue(m_hScrollTarget);
+        m_hScrollAnim->start();
+    }
+
+    event->accept();
+    return true;
+}
+
+bool HorizontalListViewGallery::moveFocus(int delta)
+{
+    if (!m_listView || !m_listModel || m_listModel->rowCount() <= 0) {
+        return false;
+    }
+
+    int row = m_keyboardFocusActive ? m_keyboardFocusRow : -1;
+    if (row < 0) {
+        const QModelIndex index = m_listView->indexAt(
+            QPoint(qMax(0, m_listView->viewport()->width() / 2), 1));
+        row = index.isValid() ? index.row() : 0;
+    } else {
+        row += delta;
+    }
+
+    setKeyboardFocusRow(row, true);
+    return true;
+}
+
+bool HorizontalListViewGallery::activateFocusedItem()
+{
+    if (!m_keyboardFocusActive || !m_listModel) {
+        return false;
+    }
+
+    const int row = clampedRow(m_keyboardFocusRow);
+    if (row < 0) {
+        return false;
+    }
+
+    Q_EMIT itemClicked(m_listModel->getItem(m_listModel->index(row, 0)));
+    return true;
+}
+
+bool HorizontalListViewGallery::hasFocusedItem() const
+{
+    return m_keyboardFocusActive && m_keyboardFocusRow >= 0;
+}
+
+int HorizontalListViewGallery::focusedRow() const
+{
+    return hasFocusedItem() ? m_keyboardFocusRow : -1;
+}
+
+void HorizontalListViewGallery::setFocusedRow(int row)
+{
+    setKeyboardFocusRow(row, true);
+}
+
+void HorizontalListViewGallery::clearKeyboardFocus()
+{
+    m_keyboardFocusActive = false;
+    m_keyboardFocusRow = -1;
+    if (m_listView) {
+        m_listView->clearSelection();
+        m_listView->setCurrentIndex(QModelIndex());
+        m_listView->viewport()->update();
+    }
+}
+
+int HorizontalListViewGallery::clampedRow(int row) const
+{
+    if (!m_listModel || m_listModel->rowCount() <= 0) {
+        return -1;
+    }
+    return qBound(0, row, m_listModel->rowCount() - 1);
+}
+
+void HorizontalListViewGallery::setKeyboardFocusRow(int row, bool center)
+{
+    const int targetRow = clampedRow(row);
+    if (targetRow < 0 || !m_listView || !m_listModel) {
+        clearKeyboardFocus();
+        return;
+    }
+
+    m_keyboardFocusActive = true;
+    m_keyboardFocusRow = targetRow;
+
+    const QModelIndex index = m_listModel->index(targetRow, 0);
+    m_listView->selectionModel()->select(
+        index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    m_listView->setCurrentIndex(index);
+    m_listView->scrollTo(index, center ? QAbstractItemView::PositionAtCenter
+                                       : QAbstractItemView::EnsureVisible);
+    m_listView->viewport()->update();
+}
+
 void HorizontalListViewGallery::scrollPage(int directionMultiplier)
 {
     if (!m_listView || !m_hScrollAnim || !m_hScrollAnim->targetObject()) {
@@ -445,6 +610,7 @@ void HorizontalListViewGallery::updateButtonPositions()
 bool HorizontalListViewGallery::eventFilter(QObject* obj, QEvent* event)
 {
     if (event->type() == QEvent::Enter || event->type() == QEvent::MouseMove) {
+        clearKeyboardFocus();
         updateButtonsVisibility();
     } else if (event->type() == QEvent::Leave) {
         QPoint globalPos = QCursor::pos();
@@ -455,38 +621,8 @@ bool HorizontalListViewGallery::eventFilter(QObject* obj, QEvent* event)
     } else if (obj == m_listView->viewport() && event->type() == QEvent::ToolTip) {
         return TextWrapUtils::showWrappedMediaItemToolTip(m_listView, event);
     } else if (event->type() == QEvent::Wheel) {
-        
         QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
-        if (qAbs(wheelEvent->angleDelta().x()) > qAbs(wheelEvent->angleDelta().y())) {
-            
-            if (!m_listView || !m_hScrollAnim || !m_hScrollAnim->targetObject()) {
-                wheelEvent->ignore();
-                return false;
-            }
-            QScrollBar* hBar = m_listView->horizontalScrollBar();
-            if (hBar) {
-                int currentVal = hBar->value();
-                if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
-                    currentVal = m_hScrollTarget;
-                }
-                int step = wheelEvent->angleDelta().x();
-                int newTarget = currentVal - step;
-                newTarget = qBound(hBar->minimum(), newTarget, hBar->maximum());
-
-                if (newTarget != hBar->value()) {
-                    m_hScrollTarget = newTarget;
-                    m_hScrollAnim->stop();
-                    m_hScrollAnim->setStartValue(hBar->value());
-                    m_hScrollAnim->setEndValue(m_hScrollTarget);
-                    m_hScrollAnim->start();
-                }
-            }
-            return true; 
-        } else {
-            
-            wheelEvent->ignore();
-            return false;
-        }
+        return handleHorizontalWheel(wheelEvent);
     }
     return QWidget::eventFilter(obj, event);
 }

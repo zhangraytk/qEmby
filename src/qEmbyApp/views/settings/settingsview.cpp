@@ -3,6 +3,7 @@
 #include "../../managers/thememanager.h" 
 #include "pageabout.h"
 #include "pageappearance.h"
+#include "pagecontrols.h"
 #include "pagegeneral.h"
 #include "pageplayer.h"
 #include "pagelibrary.h"
@@ -66,6 +67,11 @@ void SettingsView::setupUi() {
       tr(" Appearance"));
   itemAppearance->setData(Qt::UserRole, ":/svg/dark/appearance.svg");
 
+  auto *itemControls = new QListWidgetItem(
+      ThemeManager::getAdaptiveIcon(":/svg/dark/settings.svg"),
+      tr(" Controls"));
+  itemControls->setData(Qt::UserRole, ":/svg/dark/settings.svg");
+
   auto *itemPlayer = new QListWidgetItem(
       ThemeManager::getAdaptiveIcon(":/svg/dark/player.svg"), tr(" Player"));
   itemPlayer->setData(Qt::UserRole, ":/svg/dark/player.svg");
@@ -81,12 +87,14 @@ void SettingsView::setupUi() {
   
   itemGeneral->setSizeHint(QSize(220, 44));
   itemAppearance->setSizeHint(QSize(220, 44));
+  itemControls->setSizeHint(QSize(220, 44));
   itemPlayer->setSizeHint(QSize(220, 44));
   itemLibrary->setSizeHint(QSize(220, 44));
   itemAbout->setSizeHint(QSize(220, 44));
 
   m_navMenu->addItem(itemGeneral);
   m_navMenu->addItem(itemAppearance);
+  m_navMenu->addItem(itemControls);
   m_navMenu->addItem(itemLibrary);
   m_navMenu->addItem(itemPlayer);
   m_navMenu->addItem(itemAbout);
@@ -102,7 +110,7 @@ void SettingsView::setupUi() {
   
   
   
-  const int kPageCount = 5;
+  const int kPageCount = 6;
   m_scrollAreas.reserve(kPageCount);
   m_scrollAnims.reserve(kPageCount);
   m_scrollTargets.reserve(kPageCount);
@@ -177,12 +185,15 @@ void SettingsView::ensurePageAt(int row) {
     page = new PageAppearance(m_core, m_stack);
     break;
   case 2:
-    page = new PageLibrary(m_core, m_stack);
+    page = new PageControls(m_core, m_stack);
     break;
   case 3:
-    page = new PagePlayer(m_core, m_stack);
+    page = new PageLibrary(m_core, m_stack);
     break;
   case 4:
+    page = new PagePlayer(m_core, m_stack);
+    break;
+  case 5:
     page = new PageAbout(m_core, m_stack);
     break;
   default:

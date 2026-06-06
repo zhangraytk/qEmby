@@ -1895,6 +1895,10 @@ Sélectionnez un fichier, collez URL d'une image ou faites-en glisser une.</tran
         <translation> Apparence</translation>
     </message>
     <message>
+        <source> Controls</source>
+        <translation> Contrôles</translation>
+    </message>
+    <message>
         <source> Player</source>
         <translation> Lecteur</translation>
     </message>
@@ -2419,6 +2423,42 @@ Cette opération supprimera le fichier journal actuel ainsi que les sauvegardes 
         <translation>Faire en sorte que la barre latérale reste toujours visible et intégrée à la mise en page principale</translation>
     </message>
     <message>
+        <source>Pinned Sidebar Width</source>
+        <translation>Largeur de la barre latérale épinglée</translation>
+    </message>
+    <message>
+        <source>Width of the sidebar when it is pinned</source>
+        <translation>Largeur de la barre latérale lorsqu'elle est épinglée</translation>
+    </message>
+    <message>
+        <source>Floating Sidebar Width</source>
+        <translation>Largeur de la barre latérale flottante</translation>
+    </message>
+    <message>
+        <source>Width of the sidebar when it slides over the content</source>
+        <translation>Largeur de la barre latérale lorsqu'elle recouvre le contenu</translation>
+    </message>
+    <message>
+        <source>Custom Sidebar</source>
+        <translation>Barre latérale personnalisée</translation>
+    </message>
+    <message>
+        <source>Customize which items appear in the navigation sidebar</source>
+        <translation>Personnaliser les éléments affichés dans la barre latérale de navigation</translation>
+    </message>
+    <message>
+        <source>Hide Search Bar</source>
+        <translation>Masquer la barre de recherche</translation>
+    </message>
+    <message>
+        <source>Hide Home Item</source>
+        <translation>Masquer l'élément Accueil</translation>
+    </message>
+    <message>
+        <source>Hide Favorites Item</source>
+        <translation>Masquer l'élément Favoris</translation>
+    </message>
+    <message>
         <source>Normal Window</source>
         <translation>Fenêtre standard</translation>
     </message>
@@ -2493,6 +2533,62 @@ Cette action ne peut pas être annulée.</translation>
     <message>
         <source>Save recent searches locally and offer autocomplete in search boxes</source>
         <translation>Enregistrer les recherches récentes localement et proposer la saisie semi-automatique dans les champs de recherche</translation>
+    </message>
+</context>
+
+<context>
+    <name>PageControls</name>
+    <message>
+        <source>Controls</source>
+        <translation>Contrôles</translation>
+    </message>
+    <message>
+        <source>Back Shortcut</source>
+        <translation>Raccourci Retour</translation>
+    </message>
+    <message>
+        <source>Click and press a shortcut; paste semicolon-separated alternatives if needed</source>
+        <translation>Cliquez puis appuyez sur un raccourci ; collez plusieurs variantes séparées par des points-virgules si nécessaire</translation>
+    </message>
+    <message>
+        <source>Home Shortcut</source>
+        <translation>Raccourci Accueil</translation>
+    </message>
+    <message>
+        <source>Shortcut for returning to the home page</source>
+        <translation>Raccourci pour revenir à la page d'accueil</translation>
+    </message>
+    <message>
+        <source>Favorites Shortcut</source>
+        <translation>Raccourci Favoris</translation>
+    </message>
+    <message>
+        <source>Shortcut for opening favorites</source>
+        <translation>Raccourci pour ouvrir les favoris</translation>
+    </message>
+    <message>
+        <source>Feed Previous Page</source>
+        <translation>Page précédente du flux</translation>
+    </message>
+    <message>
+        <source>Shortcut for scrolling the active home feed left</source>
+        <translation>Raccourci pour faire défiler le flux d'accueil actif vers la gauche</translation>
+    </message>
+    <message>
+        <source>Feed Next Page</source>
+        <translation>Page suivante du flux</translation>
+    </message>
+    <message>
+        <source>Shortcut for scrolling the active home feed right</source>
+        <translation>Raccourci pour faire défiler le flux d'accueil actif vers la droite</translation>
+    </message>
+    <message>
+        <source>Remote Focus Navigation</source>
+        <translation>Navigation au focus avec télécommande</translation>
+    </message>
+    <message>
+        <source>Arrow keys move focus across home feeds; Enter, Space, or Select opens the focused card</source>
+        <translation>Les flèches déplacent le focus dans les flux d'accueil ; Entrée, Espace ou Select ouvre la carte ciblée</translation>
     </message>
 </context>
 

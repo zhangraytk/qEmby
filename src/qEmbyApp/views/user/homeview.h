@@ -67,6 +67,7 @@ public:
     
     PlayerView* activePlayerView() const;
     bool triggerDashboardFeedShortcut(const QKeySequence& sequence);
+    bool handleRemoteNavigationKey(int key);
 
 public Q_SLOTS:
     

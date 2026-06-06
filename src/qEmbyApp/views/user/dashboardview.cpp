@@ -42,6 +42,26 @@
 
 namespace {
 
+QPoint effectiveWheelDelta(QWheelEvent* event)
+{
+    if (!event) {
+        return {};
+    }
+
+    const QPoint pixelDelta = event->pixelDelta();
+    if (!pixelDelta.isNull()) {
+        return pixelDelta;
+    }
+
+    return event->angleDelta();
+}
+
+bool isDominantHorizontalWheel(QWheelEvent* event)
+{
+    const QPoint delta = effectiveWheelDelta(event);
+    return qAbs(delta.x()) > qAbs(delta.y());
+}
+
 bool isLibraryNavigationItem(const MediaItem& item)
 {
     return item.type == "BoxSet" || item.type == "Playlist" ||
@@ -576,14 +596,24 @@ bool DashboardView::eventFilter(QObject* obj, QEvent* event)
                                                           event);
     }
 
+    if (event->type() == QEvent::MouseMove ||
+        event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::Wheel) {
+        clearFeedKeyboardFocuses();
+    }
+
     if (event->type() == QEvent::Wheel) {
-        const bool isHorizontalViewport =
-            obj->parent() &&
-            obj->parent()->property("isHorizontalListView").toBool();
+        HorizontalListViewGallery* gallery = galleryForObject(obj);
+        const bool isHorizontalViewport = gallery && gallery->listView() &&
+            obj == gallery->listView()->viewport();
         const bool isMainViewport = (obj == m_mainScrollArea->viewport());
 
+        auto* we = static_cast<QWheelEvent*>(event);
+        if (isHorizontalViewport && isDominantHorizontalWheel(we)) {
+            return gallery->handleHorizontalWheel(we);
+        }
+
         if (isHorizontalViewport || isMainViewport) {
-            auto* we = static_cast<QWheelEvent*>(event);
             if (m_vScrollController) {
                 m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
             }
@@ -624,6 +654,85 @@ bool DashboardView::triggerFeedShortcut(const QKeySequence& sequence)
     return false;
 }
 
+bool DashboardView::handleRemoteNavigationKey(int key)
+{
+    HorizontalListViewGallery* gallery = activeFeedGallery();
+    if (!gallery) {
+        const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
+        gallery = galleries.isEmpty() ? nullptr : galleries.first();
+    }
+    if (!gallery) {
+        return false;
+    }
+
+    if (key == Qt::Key_Left) {
+        return gallery->moveFocus(-1);
+    }
+    if (key == Qt::Key_Right) {
+        return gallery->moveFocus(1);
+    }
+    if (key == Qt::Key_Return || key == Qt::Key_Enter ||
+        key == Qt::Key_Space || key == Qt::Key_Select ||
+        key == Qt::Key_Play || key == Qt::Key_MediaPlay ||
+        key == Qt::Key_MediaTogglePlayPause) {
+        return gallery->activateFocusedItem();
+    }
+    if (key != Qt::Key_Up && key != Qt::Key_Down) {
+        return false;
+    }
+
+    if (!gallery->hasFocusedItem()) {
+        return gallery->moveFocus(0);
+    }
+
+    const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
+    if (galleries.isEmpty()) {
+        return false;
+    }
+
+    int currentIndex = galleries.indexOf(gallery);
+    if (currentIndex < 0) {
+        currentIndex = 0;
+    } else {
+        currentIndex += (key == Qt::Key_Up ? -1 : 1);
+        currentIndex = qBound(0, currentIndex, galleries.size() - 1);
+    }
+
+    HorizontalListViewGallery* target = galleries.at(currentIndex);
+    const int row = gallery->focusedRow() >= 0 ? gallery->focusedRow() : 0;
+    gallery->clearKeyboardFocus();
+    target->setFocusedRow(row);
+    return true;
+}
+
+QList<HorizontalListViewGallery*> DashboardView::visibleFeedGalleries() const
+{
+    QList<HorizontalListViewGallery*> result;
+    const QList<HorizontalListViewGallery*> fixedGalleries = {
+        m_resumeGallery,
+        m_latestGallery,
+        m_recommendGallery,
+        m_completedGallery,
+    };
+
+    auto appendIfUsable = [&result](HorizontalListViewGallery* gallery) {
+        if (gallery && gallery->isVisible() && gallery->itemCount() > 0) {
+            result.append(gallery);
+        }
+    };
+
+    for (HorizontalListViewGallery* gallery : fixedGalleries) {
+        appendIfUsable(gallery);
+    }
+    for (MediaSectionWidget* section : m_libraryGalleries) {
+        if (section) {
+            appendIfUsable(section->gallery());
+        }
+    }
+
+    return result;
+}
+
 HorizontalListViewGallery* DashboardView::activeFeedGallery() const
 {
     QWidget* focused = QApplication::focusWidget();
@@ -637,29 +746,15 @@ HorizontalListViewGallery* DashboardView::activeFeedGallery() const
         focused = focused->parentWidget();
     }
 
-    const QPoint globalPos = QCursor::pos();
-    const QList<HorizontalListViewGallery*> galleries = {
-        m_resumeGallery,
-        m_latestGallery,
-        m_recommendGallery,
-        m_completedGallery,
-    };
+    const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
     for (HorizontalListViewGallery* gallery : galleries) {
-        if (!gallery || !gallery->isVisible()) {
-            continue;
-        }
-        const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
-        if (rect.contains(globalPos)) {
+        if (gallery->hasFocusedItem()) {
             return gallery;
         }
     }
 
-    for (MediaSectionWidget* section : m_libraryGalleries) {
-        if (!section || !section->gallery() ||
-            !section->gallery()->isVisible()) {
-            continue;
-        }
-        HorizontalListViewGallery* gallery = section->gallery();
+    const QPoint globalPos = QCursor::pos();
+    for (HorizontalListViewGallery* gallery : galleries) {
         const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
         if (rect.contains(globalPos)) {
             return gallery;
@@ -671,21 +766,6 @@ HorizontalListViewGallery* DashboardView::activeFeedGallery() const
         const QRect viewportRect(viewport->mapToGlobal(QPoint(0, 0)),
                                  viewport->size());
         for (HorizontalListViewGallery* gallery : galleries) {
-            if (!gallery || !gallery->isVisible()) {
-                continue;
-            }
-            const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
-            if (viewportRect.intersects(rect)) {
-                return gallery;
-            }
-        }
-
-        for (MediaSectionWidget* section : m_libraryGalleries) {
-            if (!section || !section->gallery() ||
-                !section->gallery()->isVisible()) {
-                continue;
-            }
-            HorizontalListViewGallery* gallery = section->gallery();
             const QRect rect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
             if (viewportRect.intersects(rect)) {
                 return gallery;
@@ -739,6 +819,14 @@ HorizontalListViewGallery* DashboardView::galleryForObject(QObject* obj) const
     }
 
     return nullptr;
+}
+
+void DashboardView::clearFeedKeyboardFocuses()
+{
+    const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
+    for (HorizontalListViewGallery* gallery : galleries) {
+        gallery->clearKeyboardFocus();
+    }
 }
 
 void DashboardView::adjustLibraryGridHeight()

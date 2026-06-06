@@ -782,6 +782,22 @@ bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
         return false;
     }
 
+    const Qt::KeyboardModifiers remoteModifiers =
+        event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier |
+                              Qt::AltModifier | Qt::MetaModifier);
+    const int key = event->key();
+    const bool isRemoteNavigationKey =
+        key == Qt::Key_Left || key == Qt::Key_Right ||
+        key == Qt::Key_Up || key == Qt::Key_Down ||
+        key == Qt::Key_Return || key == Qt::Key_Enter ||
+        key == Qt::Key_Space || key == Qt::Key_Select ||
+        key == Qt::Key_Play || key == Qt::Key_MediaPlay ||
+        key == Qt::Key_MediaTogglePlayPause;
+    if (remoteModifiers == Qt::NoModifier && isRemoteNavigationKey &&
+        m_homeView->handleRemoteNavigationKey(key)) {
+        return true;
+    }
+
     if (m_homeView->triggerDashboardFeedShortcut(sequence)) {
         return true;
     }

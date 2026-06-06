@@ -53,6 +53,23 @@ int keyAlias(const QString& token)
     if (key == QStringLiteral("enter") || key == QStringLiteral("return")) {
         return Qt::Key_Return;
     }
+    if (key == QStringLiteral("select")) {
+        return Qt::Key_Select;
+    }
+    if (key == QStringLiteral("play")) {
+        return Qt::Key_Play;
+    }
+    if (key == QStringLiteral("mediaplay")) {
+        return Qt::Key_MediaPlay;
+    }
+    if (key == QStringLiteral("mediapause")) {
+        return Qt::Key_MediaPause;
+    }
+    if (key == QStringLiteral("playpause") ||
+        key == QStringLiteral("mediaplaypause") ||
+        key == QStringLiteral("mediatoggleplaypause")) {
+        return Qt::Key_MediaTogglePlayPause;
+    }
     if (key == QStringLiteral("del") || key == QStringLiteral("delete")) {
         return Qt::Key_Delete;
     }
@@ -229,12 +246,12 @@ QString defaultNavigationFavoritesShortcut()
 
 QString defaultFeedPreviousPageShortcuts()
 {
-    return QStringLiteral("Left; PgUp; Page Up");
+    return QStringLiteral("PgUp; Page Up");
 }
 
 QString defaultFeedNextPageShortcuts()
 {
-    return QStringLiteral("Right; PgDown; Page Down");
+    return QStringLiteral("PgDown; Page Down");
 }
 
 void migrateLegacyShortcutDefaults()
@@ -267,8 +284,14 @@ void migrateLegacyShortcutDefaults()
     migrateIfLegacy(ConfigKeys::ShortcutFeedPreviousPage,
                     QStringLiteral("PgUp; Page Up"),
                     defaultFeedPreviousPageShortcuts());
+    migrateIfLegacy(ConfigKeys::ShortcutFeedPreviousPage,
+                    QStringLiteral("Left; PgUp; Page Up"),
+                    defaultFeedPreviousPageShortcuts());
     migrateIfLegacy(ConfigKeys::ShortcutFeedNextPage,
                     QStringLiteral("PgDown; Page Down"),
+                    defaultFeedNextPageShortcuts());
+    migrateIfLegacy(ConfigKeys::ShortcutFeedNextPage,
+                    QStringLiteral("Right; PgDown; Page Down"),
                     defaultFeedNextPageShortcuts());
 }
 

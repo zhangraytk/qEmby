@@ -14,6 +14,7 @@ class QEmbyCore;
 class QListView;
 class QPushButton;
 class QPropertyAnimation;
+class QWheelEvent;
 class MediaListModel; 
 
 class HorizontalListViewGallery : public QWidget
@@ -48,6 +49,13 @@ public:
     void scrollToItemId(const QString &itemId);
     void scrollPreviousPage();
     void scrollNextPage();
+    bool handleHorizontalWheel(QWheelEvent* event);
+    bool moveFocus(int delta);
+    bool activateFocusedItem();
+    bool hasFocusedItem() const;
+    int focusedRow() const;
+    void setFocusedRow(int row);
+    void clearKeyboardFocus();
 
     
     void setHighlightedItemId(const QString &id);
@@ -72,6 +80,8 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
+    int clampedRow(int row) const;
+    void setKeyboardFocusRow(int row, bool center);
     void scrollPage(int directionMultiplier);
     void updateButtonsVisibility();
     void updateButtonPositions();
@@ -89,6 +99,8 @@ private:
     
     QPropertyAnimation* m_hScrollAnim;
     int m_hScrollTarget;
+    int m_keyboardFocusRow = -1;
+    bool m_keyboardFocusActive = false;
 
     
     MediaCardDelegate::CardStyle m_cardStyle;

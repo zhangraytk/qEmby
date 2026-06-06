@@ -2,6 +2,7 @@
 #define FAVORITESVIEW_H
 
 #include "../baseview.h"
+#include <QList>
 #include <qcorotask.h>
 
 class QListView;
@@ -18,6 +19,7 @@ public:
     
     
     QCoro::Task<void> loadFavoritesData();
+    bool handleRemoteNavigationKey(int key);
 
 protected:
     
@@ -33,6 +35,10 @@ private:
 
     
     QWidget* createSectionHeader(const QString& title, const QString& itemType = QString());
+    QList<HorizontalListViewGallery*> visibleFeedGalleries() const;
+    HorizontalListViewGallery* activeFeedGallery() const;
+    HorizontalListViewGallery* galleryForObject(QObject* obj) const;
+    void clearFeedKeyboardFocuses();
 
     QScrollArea* m_mainScrollArea;
 
