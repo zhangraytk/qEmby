@@ -3,6 +3,7 @@
 
 #include "../baseview.h"
 #include "models/media/mediaitem.h"
+#include "../../utils/wheelinput.h"
 #include <qcorotask.h>
 
 class QScrollArea;
@@ -19,6 +20,7 @@ class SmoothScrollController;
 class DetailActionWidget;
 class DetailBottomInfoWidget;
 class MediaSectionWidget; 
+class HorizontalListViewGallery;
 class QGraphicsDropShadowEffect;
 
 class DetailView : public BaseView {
@@ -26,6 +28,8 @@ class DetailView : public BaseView {
 
 public:
   explicit DetailView(QEmbyCore *core, QWidget *parent = nullptr);
+  bool handleRemoteNavigation(NavigationCommand command) override;
+  void setRemoteFocusActive(bool active) override;
   
   
   
@@ -50,6 +54,7 @@ private slots:
 
 private:
   void setupUi();
+  void ensureRemoteFocusVisible(HorizontalListViewGallery *gallery);
   void updateBackdrop();
   void updateOverviewElidedText();
   void updateTagLayoutHeight();
@@ -261,6 +266,7 @@ private:
   int m_currentSeasonIndex = 0;     
 
   SmoothScrollController *m_vScrollController = nullptr;
+  WheelInput::AxisLock m_wheelAxisLock;
 };
 
 #endif 

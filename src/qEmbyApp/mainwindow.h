@@ -5,6 +5,7 @@
 #include <QElapsedTimer> 
 #include <QCloseEvent>   
 #include <QKeySequence>
+#include "utils/inputnavigation.h"
 
 class QEmbyCore;
 class LoginView;
@@ -35,6 +36,8 @@ protected:
 
 private:
     bool triggerBackNavigation();
+    bool triggerForwardNavigation();
+    void setInputMode(InputMode mode);
     void triggerHomeNavigation();
     void triggerFavoritesNavigation();
     bool handleConfiguredShortcut(QKeyEvent *event);
@@ -66,6 +69,9 @@ private:
     bool m_realQuit{false}; 
     bool m_themeAnimating{false}; 
     bool m_wasPausedByTray{false}; 
+    InputMode m_inputMode{InputMode::Pointer};
+    QPoint m_lastPointerPosition;
+    bool m_hasPointerPosition{false};
 };
 
 #endif 

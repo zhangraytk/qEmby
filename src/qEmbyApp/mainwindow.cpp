@@ -12,6 +12,7 @@
 #include "config/config_keys.h"    
 #include "utils/contextmenuutils.h"
 #include "utils/shortcututils.h"
+#include "utils/inputnavigation.h"
 #include <services/manager/servermanager.h>
 #include <QStackedWidget>
 #include <QDebug>
@@ -43,8 +44,10 @@
 #include <QtMath>
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QNativeGestureEvent>
 #include <QDialog>
 #include <QKeySequence>
+#include <cmath>
 
 #include <QWKWidgets/widgetwindowagent.h>
 #include <widgetframe/windowbar.h>
@@ -730,6 +733,39 @@ bool MainWindow::triggerBackNavigation()
     return true;
 }
 
+bool MainWindow::triggerForwardNavigation()
+{
+    if (!m_viewStack || !m_homeView ||
+        m_viewStack->currentWidget() != m_homeView ||
+        !m_homeView->canNavigateForward()) {
+        return false;
+    }
+
+    m_homeView->navigateForward();
+    m_backClickTimer.invalidate();
+    return true;
+}
+
+void MainWindow::setInputMode(InputMode mode)
+{
+    if (m_inputMode == mode) {
+        return;
+    }
+    m_inputMode = mode;
+    const bool remote = mode == InputMode::RemoteFocus;
+    setProperty("remoteFocusMode", remote);
+    if (m_homeView) {
+        m_homeView->setRemoteFocusActive(remote);
+    }
+
+    const auto widgets = findChildren<QWidget*>();
+    for (QWidget* widget : widgets) {
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+        widget->update();
+    }
+}
+
 void MainWindow::triggerHomeNavigation()
 {
     if (!m_viewStack || !m_homeView || m_viewStack->currentWidget() != m_homeView) {
@@ -778,24 +814,30 @@ bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
         return false;
     }
 
-    if (m_homeView->activePlayerView()) {
-        return false;
-    }
-
     const Qt::KeyboardModifiers remoteModifiers =
         event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier |
                               Qt::AltModifier | Qt::MetaModifier);
     const int key = event->key();
-    const bool isRemoteNavigationKey =
-        key == Qt::Key_Left || key == Qt::Key_Right ||
-        key == Qt::Key_Up || key == Qt::Key_Down ||
-        key == Qt::Key_Return || key == Qt::Key_Enter ||
-        key == Qt::Key_Space || key == Qt::Key_Select ||
-        key == Qt::Key_Play || key == Qt::Key_MediaPlay ||
-        key == Qt::Key_MediaTogglePlayPause;
-    if (remoteModifiers == Qt::NoModifier && isRemoteNavigationKey &&
-        m_homeView->handleRemoteNavigationKey(key)) {
-        return true;
+    if (remoteModifiers == Qt::NoModifier && key == Qt::Key_Back) {
+        setInputMode(InputMode::RemoteFocus);
+        return triggerBackNavigation();
+    }
+    if (remoteModifiers == Qt::NoModifier && key == Qt::Key_Forward) {
+        setInputMode(InputMode::RemoteFocus);
+        return triggerForwardNavigation();
+    }
+
+    if (m_homeView->activePlayerView()) {
+        return false;
+    }
+
+    const auto command = InputNavigation::fromKeyEvent(event);
+    if (command && *command != NavigationCommand::Back &&
+        *command != NavigationCommand::Forward) {
+        setInputMode(InputMode::RemoteFocus);
+        if (m_homeView->handleRemoteNavigation(*command)) {
+            return true;
+        }
     }
 
     if (m_homeView->triggerDashboardFeedShortcut(sequence)) {
@@ -805,6 +847,10 @@ bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
     if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationBack,
                         ShortcutUtils::defaultNavigationBackShortcuts())) {
         return triggerBackNavigation();
+    }
+    if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationForward,
+                        ShortcutUtils::defaultNavigationForwardShortcuts())) {
+        return triggerForwardNavigation();
     }
     if (matchesShortcut(sequence, ConfigKeys::ShortcutNavigationHome,
                         ShortcutUtils::defaultNavigationHomeShortcut())) {
@@ -1257,6 +1303,21 @@ void MainWindow::navigateToLogin() {
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    if (event->type() == QEvent::MouseMove) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        const QPoint position = mouseEvent->globalPosition().toPoint();
+        if (m_inputMode == InputMode::RemoteFocus &&
+            (!m_hasPointerPosition ||
+             (position - m_lastPointerPosition).manhattanLength() >= 6)) {
+            setInputMode(InputMode::Pointer);
+        }
+        m_lastPointerPosition = position;
+        m_hasPointerPosition = true;
+    } else if (event->type() == QEvent::MouseButtonPress ||
+               event->type() == QEvent::Wheel ||
+               event->type() == QEvent::NativeGesture) {
+        setInputMode(InputMode::Pointer);
+    }
     if (watched == qApp && event->type() == QEvent::ApplicationStateChange) {
         if (QGuiApplication::applicationState() != Qt::ApplicationActive) {
             hideGlobalSearchTransientUi();
@@ -1315,6 +1376,44 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         }
     }
 
+    if (event->type() == QEvent::NativeGesture) {
+        auto *gestureEvent = static_cast<QNativeGestureEvent *>(event);
+        if (gestureEvent->gestureType() == Qt::SwipeNativeGesture) {
+            const qreal radians = qDegreesToRadians(gestureEvent->value());
+            const qreal horizontal = std::cos(radians);
+            if (qAbs(horizontal) >= 0.5) {
+                const bool forward = horizontal < 0.0;
+                if (auto *popup = QApplication::activePopupWidget()) {
+                    if (!forward) {
+                        popup->close();
+                    }
+                    gestureEvent->accept();
+                    return true;
+                }
+                if (auto *modal = QApplication::activeModalWidget()) {
+                    if (!forward) {
+                        if (auto *dialog = qobject_cast<QDialog *>(modal)) {
+                            dialog->reject();
+                            gestureEvent->accept();
+                            return true;
+                        }
+                    }
+                    gestureEvent->ignore();
+                    return false;
+                }
+
+                const bool handled = forward ? triggerForwardNavigation()
+                                             : triggerBackNavigation();
+                if (handled) {
+                    gestureEvent->accept();
+                } else {
+                    gestureEvent->ignore();
+                }
+                return handled;
+            }
+        }
+    }
+
     if ((event->type() == QEvent::MouseButtonPress ||
          event->type() == QEvent::MouseButtonDblClick) &&
         m_globalSearchHistoryPopup && m_globalSearchHistoryPopup->isVisible() &&
@@ -1333,29 +1432,31 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     
     if (event->type() == QEvent::MouseButtonRelease) {
         auto *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (mouseEvent->button() == Qt::BackButton || mouseEvent->button() == Qt::XButton1) {
-            
-            
-            if (auto *modal = QApplication::activeModalWidget()) {
-                if (auto *dlg = qobject_cast<QDialog *>(modal)) {
-                    dlg->reject();
+        const bool isBack = mouseEvent->button() == Qt::BackButton;
+        const bool isForward = mouseEvent->button() == Qt::ForwardButton;
+        if (isBack || isForward) {
+            if (auto *popup = QApplication::activePopupWidget()) {
+                if (isBack) {
+                    popup->close();
                 }
                 return true;
             }
-            auto back = findChild<QWK::WindowButton*>("back-button");
-            
-            if (back && back->isVisible()) {
-                back->click(); 
-                return true;   
+            if (auto *modal = QApplication::activeModalWidget()) {
+                if (isBack) {
+                    if (auto *dlg = qobject_cast<QDialog *>(modal)) {
+                        dlg->reject();
+                    }
+                }
+                return true;
             }
+            return isForward ? triggerForwardNavigation()
+                             : triggerBackNavigation();
         }
     } else if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick) {
         auto *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (mouseEvent->button() == Qt::BackButton || mouseEvent->button() == Qt::XButton1) {
-            auto back = findChild<QWK::WindowButton*>("back-button");
-            if (back && back->isVisible()) {
-                return true; 
-            }
+        if (mouseEvent->button() == Qt::BackButton ||
+            mouseEvent->button() == Qt::ForwardButton) {
+            return true;
         }
     }
 

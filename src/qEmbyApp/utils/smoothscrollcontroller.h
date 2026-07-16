@@ -7,6 +7,7 @@
 #include <QtGlobal>
 
 class QScrollBar;
+class QNativeGestureEvent;
 class QWheelEvent;
 
 class SmoothScrollController : public QObject
@@ -22,6 +23,8 @@ public:
     void scrollTo(int value, bool animated = true);
     bool scrollByWheelEvent(const QWheelEvent *event,
                             Qt::Orientation orientation);
+    bool scrollByNativeGesture(const QNativeGestureEvent *event,
+                               Qt::Orientation orientation);
 
     int targetValue() const;
 
@@ -29,6 +32,7 @@ private:
     int boundedValue(int value) const;
     int wheelDelta(const QWheelEvent *event,
                    Qt::Orientation orientation) const;
+    bool scrollByDelta(qreal delta, bool precise);
     void startTicker();
 
     QScrollBar *m_scrollBar = nullptr;

@@ -38,33 +38,21 @@ void SlidingStackedWidget::slideInIdx(int idx, SlideDirection direction)
     if (idx < 0 || idx >= count())
         return;
 
-    
-    if (currentIndex() == idx && !m_isAnimating)
-        return;
-
-    
-    
+    QPointer<QWidget> requestedWidget = widget(idx);
     if (m_isAnimating) {
-        
-        
-        
-        bool allTargetsAlive = true;
-        for (int i = 0; i < m_animGroup->animationCount(); ++i) {
-            auto *anim = qobject_cast<QPropertyAnimation *>(m_animGroup->animationAt(i));
-            if (anim && !anim->targetObject()) {
-                allTargetsAlive = false;
-                break;
-            }
+        finishActiveTransition();
+        if (!requestedWidget) {
+            return;
         }
-
-        if (allTargetsAlive) {
-            m_animGroup->stop();       
+        idx = indexOf(requestedWidget);
+        if (idx < 0) {
+            return;
         }
-        
-        animationDoneSlot();           
     }
 
-    
+    if (currentIndex() == idx)
+        return;
+
     bool reduceAnimations = ConfigStore::instance()->get<bool>(ConfigKeys::UiAnimations, false);
     if (reduceAnimations) {
         m_nextIndex = idx;
@@ -184,6 +172,18 @@ void SlidingStackedWidget::disposeWidgetWhenSafe(QWidget *widget)
     {
         flushPendingWidgetDisposals();
     }
+}
+
+void SlidingStackedWidget::finishActiveTransition()
+{
+    if (!m_isAnimating) {
+        return;
+    }
+
+    if (m_animGroup->state() == QAbstractAnimation::Running) {
+        m_animGroup->stop();
+    }
+    animationDoneSlot();
 }
 
 void SlidingStackedWidget::animationDoneSlot()

@@ -34,6 +34,7 @@
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
 #include <QHideEvent>
+#include <QItemSelectionModel>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
@@ -50,6 +51,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <models/profile/serverprofile.h>
 #include <qembycore.h>
 #include <qcorotask.h>
@@ -150,21 +152,162 @@ bool HomeView::triggerDashboardFeedShortcut(const QKeySequence& sequence)
     return m_dashboardView->triggerFeedShortcut(sequence);
 }
 
-bool HomeView::handleRemoteNavigationKey(int key)
+bool HomeView::handleRemoteNavigation(NavigationCommand command)
 {
     if (!m_contentSwitcher) {
         return false;
     }
 
     QWidget* current = m_contentSwitcher->currentWidget();
-    if (current == m_dashboardView && m_dashboardView) {
-        return m_dashboardView->handleRemoteNavigationKey(key);
-    }
-    if (current == m_favoritesView && m_favoritesView) {
-        return m_favoritesView->handleRemoteNavigationKey(key);
+    QWidget* focused = QApplication::focusWidget();
+    const bool focusInSidebar = focused && m_sidebar &&
+        (focused == m_sidebar || m_sidebar->isAncestorOf(focused));
+    if (focusInSidebar) {
+        if (command == NavigationCommand::Activate) {
+            if (focused == m_libraryList && m_libraryList->currentItem()) {
+                Q_EMIT m_libraryList->itemClicked(m_libraryList->currentItem());
+                return true;
+            }
+            return InputNavigation::activateFocusedWidget(m_sidebar);
+        }
+        if ((command == NavigationCommand::Up ||
+             command == NavigationCommand::Down) &&
+            focused == m_libraryList && m_libraryList->count() > 0) {
+            const int direction = command == NavigationCommand::Up ? -1 : 1;
+            const int row = qBound(0, m_libraryList->currentRow() + direction,
+                                   m_libraryList->count() - 1);
+            m_libraryList->setCurrentRow(row);
+            InputNavigation::animateItemFocus(
+                m_libraryList, m_libraryList->currentIndex());
+            InputNavigation::ensureItemVisible(
+                m_libraryList, m_libraryList->currentIndex(),
+                m_sidebarLibraryScrollController);
+            return true;
+        }
+        if (InputNavigation::moveSpatialFocus(m_sidebar, command)) {
+            return true;
+        }
+        const bool awayFromSidebar =
+            (!m_sidebarOnRight && command == NavigationCommand::Right) ||
+            (m_sidebarOnRight && command == NavigationCommand::Left);
+        if (!awayFromSidebar) {
+            return false;
+        }
+        clearSidebarRemoteFocusVisual();
+        if (current == m_dashboardView && m_dashboardView) {
+            m_dashboardView->setRemoteFocusActive(true);
+        } else if (current == m_favoritesView && m_favoritesView) {
+            m_favoritesView->setRemoteFocusActive(true);
+        } else if (auto* baseView = qobject_cast<BaseView*>(current)) {
+            baseView->setRemoteFocusActive(true);
+        }
     }
 
+    if (current == m_dashboardView && m_dashboardView) {
+        const int key = command == NavigationCommand::Left ? Qt::Key_Left
+                      : command == NavigationCommand::Right ? Qt::Key_Right
+                      : command == NavigationCommand::Up ? Qt::Key_Up
+                      : command == NavigationCommand::Down ? Qt::Key_Down
+                      : command == NavigationCommand::Activate ? Qt::Key_Select
+                      : 0;
+        if (key && m_dashboardView->handleRemoteNavigationKey(key)) {
+            return true;
+        }
+    }
+    else if (current == m_favoritesView && m_favoritesView) {
+        const int key = command == NavigationCommand::Left ? Qt::Key_Left
+                      : command == NavigationCommand::Right ? Qt::Key_Right
+                      : command == NavigationCommand::Up ? Qt::Key_Up
+                      : command == NavigationCommand::Down ? Qt::Key_Down
+                      : command == NavigationCommand::Activate ? Qt::Key_Select
+                      : 0;
+        if (key && m_favoritesView->handleRemoteNavigationKey(key)) {
+            return true;
+        }
+    }
+    else if (auto* baseView = qobject_cast<BaseView*>(current)) {
+        if (baseView->handleRemoteNavigation(command)) {
+            return true;
+        }
+    }
+
+    const bool towardSidebar =
+        (!m_sidebarOnRight && command == NavigationCommand::Left) ||
+        (m_sidebarOnRight && command == NavigationCommand::Right);
+    if (towardSidebar && m_sidebar) {
+        clearContentRemoteFocusVisual();
+        if (!m_sidebarPinned) {
+            showSidebar();
+        }
+        if (m_libraryList && m_libraryList->count() > 0) {
+            const int row = qMax(0, m_libraryList->currentRow());
+            m_libraryList->setCurrentRow(
+                row, QItemSelectionModel::ClearAndSelect);
+            m_libraryList->setFocus(Qt::OtherFocusReason);
+            InputNavigation::animateItemFocus(
+                m_libraryList, m_libraryList->currentIndex());
+            InputNavigation::ensureItemVisible(
+                m_libraryList, m_libraryList->currentIndex(),
+                m_sidebarLibraryScrollController);
+        } else if (m_btnHome) {
+            m_btnHome->setFocus(Qt::OtherFocusReason);
+            InputNavigation::animateWidgetFocus(m_btnHome);
+        }
+        return true;
+    }
     return false;
+}
+
+void HomeView::clearSidebarRemoteFocusVisual()
+{
+    InputNavigation::clearFocusAnimations(m_sidebar);
+    if (m_libraryList) {
+        m_libraryList->clearSelection();
+    }
+    QWidget* focused = QApplication::focusWidget();
+    if (focused && m_sidebar &&
+        (focused == m_sidebar || m_sidebar->isAncestorOf(focused))) {
+        focused->clearFocus();
+    }
+}
+
+void HomeView::clearContentRemoteFocusVisual()
+{
+    if (!m_contentSwitcher) {
+        return;
+    }
+    QWidget* current = m_contentSwitcher->currentWidget();
+    InputNavigation::clearFocusAnimations(current);
+    if (current == m_dashboardView && m_dashboardView) {
+        m_dashboardView->setRemoteFocusActive(false);
+    } else if (current == m_favoritesView && m_favoritesView) {
+        m_favoritesView->setRemoteFocusActive(false);
+    } else if (auto* baseView = qobject_cast<BaseView*>(current)) {
+        baseView->setRemoteFocusActive(false);
+    }
+}
+
+void HomeView::setRemoteFocusActive(bool active)
+{
+    setProperty("remoteFocusActive", active);
+    if (m_dashboardView) {
+        m_dashboardView->setRemoteFocusActive(active);
+    }
+    if (m_favoritesView) {
+        m_favoritesView->setRemoteFocusActive(active);
+    }
+    if (m_contentSwitcher) {
+        if (auto* baseView =
+                qobject_cast<BaseView*>(m_contentSwitcher->currentWidget())) {
+            baseView->setRemoteFocusActive(active);
+        }
+    }
+    if (!active) {
+        QWidget* focused = QApplication::focusWidget();
+        if (focused && (focused == this || isAncestorOf(focused))) {
+            focused->clearFocus();
+        }
+    }
 }
 
 void HomeView::setupUi()
@@ -282,6 +425,7 @@ void HomeView::setupUi()
 
     
     m_navStack.clear();
+    m_forwardStack.clear();
 
     setupSidebar();
 
@@ -551,6 +695,9 @@ QWidget *HomeView::createPlayerView(const QString &mediaId, const QString &title
     view->setProperty("routeType", "PlayerView");
     view->setProperty("routeId", mediaId);
     view->setProperty("routeTitle", title);
+    view->setProperty("routeStreamUrl", streamUrl);
+    view->setProperty("routeStartPositionTicks", startPositionTicks);
+    view->setProperty("routeExtraData", extraData);
 
     
     connect(view, &BaseView::navigateBack, this, &HomeView::navigateBack);
@@ -746,7 +893,7 @@ void HomeView::setupSidebar()
 
     m_libraryList = new QListWidget(m_sidebar);
     m_libraryList->setObjectName("sidebar-list");
-    m_libraryList->setFocusPolicy(Qt::NoFocus);
+    m_libraryList->setFocusPolicy(Qt::StrongFocus);
     m_libraryList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_libraryList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_libraryList->setTextElideMode(Qt::ElideRight);
@@ -963,7 +1110,14 @@ void HomeView::setupSidebar()
                          key == ConfigKeys::SidebarFloatingWidth)
                 {
                     applySidebarMetrics(m_sidebarPinned);
-                    syncSidebarVisibility();
+                    if (m_sidebarPinned || isCurrentViewImmersive())
+                    {
+                        syncSidebarVisibility();
+                    }
+                    else
+                    {
+                        positionFloatingSidebar(m_floatingSidebarShown);
+                    }
                 }
                 else if (key == ConfigKeys::SidebarCustomEnabled ||
                          key == ConfigKeys::SidebarHideSearch ||
@@ -1112,6 +1266,10 @@ QString HomeView::currentSearchServerId() const
 
 void HomeView::pushView(QWidget *view)
 {
+    if (!m_contentSwitcher || !view)
+        return;
+
+    m_contentSwitcher->finishActiveTransition();
     QWidget *current = m_contentSwitcher->currentWidget();
     if (current == view)
         return;
@@ -1124,16 +1282,9 @@ void HomeView::pushView(QWidget *view)
     
     if (current)
     {
-        RouteInfo info;
-        info.widget = current;
-        info.isDynamic = current->property("isDynamic").toBool();
-        info.routeType = current->property("routeType").toString();
-        info.routeId = current->property("routeId").toString();
-        info.routeTitle = current->property("routeTitle").toString();
-        
-        info.routeExtraId = current->property("routeExtraId").toString();
-        m_navStack.push(info);
+        m_navStack.push(routeInfoForWidget(current));
     }
+    m_forwardStack.clear();
 
     
     const int MAX_ACTIVE_VIEWS = 12;
@@ -1147,11 +1298,10 @@ void HomeView::pushView(QWidget *view)
             activeDynamicCount++;
             if (activeDynamicCount > MAX_ACTIVE_VIEWS)
             {
-                
-                m_contentSwitcher->removeWidget(m_navStack[i].widget);
-                m_navStack[i].widget->deleteLater();
-                
-                
+                QPointer<QWidget> expiredWidget = m_navStack[i].widget;
+                m_navStack[i].widget.clear();
+                m_contentSwitcher->removeWidget(expiredWidget);
+                expiredWidget->deleteLater();
             }
         }
     }
@@ -1160,11 +1310,86 @@ void HomeView::pushView(QWidget *view)
     QMetaObject::invokeMethod(view, "scrollToTop", Qt::QueuedConnection);
 
     m_contentSwitcher->slideInWgt(view, SlidingStackedWidget::RightToLeft);
+    emitNavigationState();
+}
+
+RouteInfo HomeView::routeInfoForWidget(
+    QWidget *widget, RouteWidgetRetention retention) const
+{
+    RouteInfo info;
+    if (!widget) {
+        return info;
+    }
+
+    info.isDynamic = widget->property("isDynamic").toBool();
+    if (!info.isDynamic || retention == RouteWidgetRetention::KeepWidget) {
+        info.widget = widget;
+    }
+    info.routeType = widget->property("routeType").toString();
+    info.routeId = widget->property("routeId").toString();
+    info.routeTitle = widget->property("routeTitle").toString();
+    info.routeExtraId = widget->property("routeExtraId").toString();
+    if (info.routeType == QStringLiteral("PlayerView")) {
+        info.payload.insert(QStringLiteral("streamUrl"),
+                            widget->property("routeStreamUrl"));
+        info.payload.insert(QStringLiteral("startPositionTicks"),
+                            widget->property("routeStartPositionTicks"));
+        info.payload.insert(QStringLiteral("extraData"),
+                            widget->property("routeExtraData"));
+    }
+    return info;
+}
+
+QWidget *HomeView::restoreRoute(const RouteInfo &info)
+{
+    if (info.widget) {
+        return info.widget;
+    }
+    if (!info.isDynamic) {
+        return nullptr;
+    }
+
+    if (info.routeType == QStringLiteral("DetailView"))
+        return createDetailView(info.routeId, info.routeTitle);
+    if (info.routeType == QStringLiteral("LibraryView"))
+        return createLibraryView(info.routeId, info.routeTitle);
+    if (info.routeType == QStringLiteral("CategoryView"))
+        return createCategoryView(info.routeId, info.routeTitle);
+    if (info.routeType == QStringLiteral("SearchView"))
+        return createSearchView(info.routeId);
+    if (info.routeType == QStringLiteral("SettingsView"))
+        return createSettingsView();
+    if (info.routeType == QStringLiteral("PersonView"))
+        return createPersonView(info.routeId, info.routeTitle);
+    if (info.routeType == QStringLiteral("SeasonView"))
+        return createSeasonView(info.routeExtraId, info.routeId,
+                                info.routeTitle);
+    if (info.routeType == QStringLiteral("ManageView"))
+        return createManageView();
+    if (info.routeType == QStringLiteral("FilteredView"))
+        return createFilteredView(info.routeExtraId, info.routeTitle);
+    if (info.routeType == QStringLiteral("PlayerView")) {
+        return createPlayerView(
+            info.routeId, info.routeTitle,
+            info.payload.value(QStringLiteral("streamUrl")).toString(),
+            info.payload.value(QStringLiteral("startPositionTicks")).toLongLong(),
+            info.payload.value(QStringLiteral("extraData")));
+    }
+    return nullptr;
+}
+
+void HomeView::emitNavigationState()
+{
     Q_EMIT canNavigateBackChanged(!m_navStack.isEmpty());
+    Q_EMIT canNavigateForwardChanged(!m_forwardStack.isEmpty());
 }
 
 void HomeView::navigateBack()
 {
+    if (!m_contentSwitcher) {
+        return;
+    }
+    m_contentSwitcher->finishActiveTransition();
     QWidget *current = m_contentSwitcher->currentWidget();
 
     
@@ -1188,55 +1413,15 @@ void HomeView::navigateBack()
 
     if (!m_navStack.isEmpty())
     {
-        RouteInfo prevInfo = m_navStack.pop();
-        QWidget *targetView = prevInfo.widget;
-
-        
-        if (!targetView && prevInfo.isDynamic)
-        {
-            if (prevInfo.routeType == "DetailView")
-            {
-                targetView = createDetailView(prevInfo.routeId, prevInfo.routeTitle);
-            }
-            else if (prevInfo.routeType == "LibraryView")
-            {
-                targetView = createLibraryView(prevInfo.routeId, prevInfo.routeTitle);
-            }
-            else if (prevInfo.routeType == "CategoryView")
-            {
-                targetView = createCategoryView(prevInfo.routeId, prevInfo.routeTitle);
-            }
-            else if (prevInfo.routeType == "SearchView")
-            {
-                targetView = createSearchView(prevInfo.routeId);
-            }
-            else if (prevInfo.routeType == "SettingsView")
-            {
-                targetView = createSettingsView();
-            }
-            else if (prevInfo.routeType == "PersonView")
-            {
-                targetView = createPersonView(prevInfo.routeId, prevInfo.routeTitle);
-            }
-            else if (prevInfo.routeType == "SeasonView")
-            {
-                
-                targetView = createSeasonView(prevInfo.routeExtraId, prevInfo.routeId, prevInfo.routeTitle);
-            }
-            else if (prevInfo.routeType == "ManageView")
-            {
-                targetView = createManageView();
-            }
-            else if (prevInfo.routeType == "FilteredView")
-            {
-                targetView = createFilteredView(prevInfo.routeExtraId, prevInfo.routeTitle);
-            }
-
-            if (targetView && m_contentSwitcher->indexOf(targetView) == -1)
-            {
-                m_contentSwitcher->addWidget(targetView);
-            }
+        if (current) {
+            m_forwardStack.push(routeInfoForWidget(
+                current, RouteWidgetRetention::MetadataOnly));
         }
+        RouteInfo prevInfo = m_navStack.pop();
+        QWidget *targetView = restoreRoute(prevInfo);
+
+        if (targetView && m_contentSwitcher->indexOf(targetView) == -1)
+            m_contentSwitcher->addWidget(targetView);
 
         
         if (!targetView)
@@ -1248,7 +1433,7 @@ void HomeView::navigateBack()
         
 
         m_contentSwitcher->slideInWgt(targetView, SlidingStackedWidget::LeftToRight);
-        Q_EMIT canNavigateBackChanged(!m_navStack.isEmpty());
+        emitNavigationState();
 
         
         
@@ -1260,11 +1445,47 @@ void HomeView::navigateBack()
     }
 }
 
+void HomeView::navigateForward()
+{
+    if (!m_contentSwitcher || m_forwardStack.isEmpty()) {
+        return;
+    }
+
+    m_contentSwitcher->finishActiveTransition();
+    QWidget *current = m_contentSwitcher->currentWidget();
+    if (auto *baseView = qobject_cast<BaseView *>(current)) {
+        baseView->prepareForStackLeave();
+    }
+    if (current) {
+        m_navStack.push(routeInfoForWidget(
+            current, RouteWidgetRetention::MetadataOnly));
+    }
+
+    const RouteInfo nextInfo = m_forwardStack.pop();
+    QWidget *targetView = restoreRoute(nextInfo);
+    if (!targetView) {
+        targetView = m_dashboardView;
+    }
+    if (m_contentSwitcher->indexOf(targetView) == -1) {
+        m_contentSwitcher->addWidget(targetView);
+    }
+
+    m_contentSwitcher->slideInWgt(targetView,
+                                  SlidingStackedWidget::RightToLeft);
+    emitNavigationState();
+
+    if (current && current->property("isDynamic").toBool()) {
+        m_contentSwitcher->disposeWidgetWhenSafe(current);
+    }
+}
+
 void HomeView::goHome()
 {
     if (m_contentSwitcher->currentWidget() == m_dashboardView)
     {
-        
+        m_navStack.clear();
+        m_forwardStack.clear();
+        emitNavigationState();
         m_dashboardView->loadDashboardData();
         return;
     }
@@ -1276,7 +1497,9 @@ void HomeView::goFav()
 {
     if (m_contentSwitcher->currentWidget() == m_favoritesView)
     {
-        
+        m_navStack.clear();
+        m_forwardStack.clear();
+        emitNavigationState();
         m_favoritesView->loadFavoritesData();
         return;
     }
@@ -1286,8 +1509,16 @@ void HomeView::goFav()
 
 void HomeView::resetToView(QWidget *view)
 {
-    if (m_contentSwitcher->currentWidget() == view)
+    if (!m_contentSwitcher || !view) {
         return;
+    }
+    m_contentSwitcher->finishActiveTransition();
+    if (m_contentSwitcher->currentWidget() == view) {
+        m_navStack.clear();
+        m_forwardStack.clear();
+        emitNavigationState();
+        return;
+    }
 
     
     QList<QPointer<QWidget>> widgetsToDelete;
@@ -1300,6 +1531,7 @@ void HomeView::resetToView(QWidget *view)
             widgetsToDelete.append(info.widget);
         }
     }
+    m_forwardStack.clear();
 
     QWidget *current = m_contentSwitcher->currentWidget();
     if (auto *baseView = qobject_cast<BaseView *>(current))
@@ -1319,7 +1551,7 @@ void HomeView::resetToView(QWidget *view)
     QMetaObject::invokeMethod(view, "scrollToTop", Qt::QueuedConnection);
 
     m_contentSwitcher->slideInWgt(view, SlidingStackedWidget::Automatic);
-    Q_EMIT canNavigateBackChanged(false);
+    emitNavigationState();
 
     
     if (current && current->property("isDynamic").toBool() && current != view)
@@ -1342,6 +1574,11 @@ void HomeView::resetToView(QWidget *view)
 bool HomeView::canNavigateBack() const
 {
     return !m_navStack.isEmpty();
+}
+
+bool HomeView::canNavigateForward() const
+{
+    return !m_forwardStack.isEmpty();
 }
 
 bool HomeView::canGoHome() const
@@ -1609,38 +1846,7 @@ void HomeView::resizeEvent(QResizeEvent *event)
     if (m_sidebarPinned)
         return;
 
-    const int sidebarW = m_sidebar->width();
-
-    if (m_sidebarOnRight)
-    {
-        
-        m_edgeTrigger->setGeometry(width() - kRightEdgeTriggerWidth, 0, kRightEdgeTriggerWidth, height());
-
-        
-        bool isShown = (m_sidebar->x() < width() && m_sidebar->x() >= width() - sidebarW);
-        if (isShown)
-        {
-            m_sidebar->setGeometry(width() - sidebarW, 0, sidebarW, height());
-        }
-        else
-        {
-            m_sidebar->setGeometry(width() + kSidebarHiddenOffset, 0, sidebarW, height());
-        }
-    }
-    else
-    {
-        
-        m_edgeTrigger->setGeometry(0, 0, kLeftEdgeTriggerWidth, height());
-
-        if (m_sidebar->x() < 0)
-        {
-            m_sidebar->setGeometry(-sidebarW - kSidebarHiddenOffset, 0, sidebarW, height());
-        }
-        else
-        {
-            m_sidebar->setGeometry(0, 0, sidebarW, height());
-        }
-    }
+    positionFloatingSidebar(m_floatingSidebarShown);
 }
 
 bool HomeView::eventFilter(QObject *watched, QEvent *event)
@@ -1738,6 +1944,18 @@ bool HomeView::eventFilter(QObject *watched, QEvent *event)
             return true;
         }
     }
+    if (m_libraryList && watched == m_libraryList->viewport() &&
+        event->type() == QEvent::NativeGesture)
+    {
+        auto *gesture = static_cast<QNativeGestureEvent *>(event);
+        if (gesture->gestureType() == Qt::PanNativeGesture &&
+            m_sidebarLibraryScrollController &&
+            m_sidebarLibraryScrollController->scrollByNativeGesture(
+                gesture, Qt::Vertical))
+        {
+            return true;
+        }
+    }
 
     
     if (m_sidebarPinned)
@@ -1777,22 +1995,14 @@ bool HomeView::eventFilter(QObject *watched, QEvent *event)
 
 void HomeView::showSidebar()
 {
-    
     if (m_sidebarPinned || isCurrentViewImmersive())
         return;
 
-    
+    m_floatingSidebarShown = true;
     bool reduceAnimations = ConfigStore::instance()->get<bool>(ConfigKeys::UiAnimations, false);
     if (reduceAnimations)
     {
-        if (m_sidebarOnRight)
-        {
-            m_sidebar->move(width() - m_sidebar->width(), 0);
-        }
-        else
-        {
-            m_sidebar->move(0, 0);
-        }
+        positionFloatingSidebar(true);
         m_sidebarAutoHideTimer->start(); 
         return;
     }
@@ -1815,26 +2025,18 @@ void HomeView::showSidebar()
 
 void HomeView::hideSidebar()
 {
-    
     if (m_sidebarPinned)
         return;
 
-    
+    m_floatingSidebarShown = false;
+    m_sidebarAutoHideTimer->stop();
     bool reduceAnimations = ConfigStore::instance()->get<bool>(ConfigKeys::UiAnimations, false);
     if (reduceAnimations)
     {
-        if (m_sidebarOnRight)
-        {
-            m_sidebar->move(width() + kSidebarHiddenOffset, 0);
-        }
-        else
-        {
-            m_sidebar->move(-m_sidebar->width() - kSidebarHiddenOffset, 0);
-        }
+        positionFloatingSidebar(false);
         return;
     }
 
-    m_sidebarAutoHideTimer->stop(); 
     if (m_sidebarAnim->state() == QAbstractAnimation::Running)
         m_sidebarAnim->stop();
     m_sidebarAnim->setStartValue(m_sidebar->pos());
@@ -2026,6 +2228,33 @@ void HomeView::applySidebarMetrics(bool pinned)
     }
 }
 
+void HomeView::positionFloatingSidebar(bool shown)
+{
+    if (!m_sidebar || !m_edgeTrigger || m_sidebarPinned) {
+        return;
+    }
+
+    if (m_sidebarAnim &&
+        m_sidebarAnim->state() == QAbstractAnimation::Running) {
+        m_sidebarAnim->stop();
+    }
+
+    const int sidebarW = m_sidebar->width();
+    const int sidebarX = m_sidebarOnRight
+        ? (shown ? width() - sidebarW : width() + kSidebarHiddenOffset)
+        : (shown ? 0 : -sidebarW - kSidebarHiddenOffset);
+    m_sidebar->setGeometry(sidebarX, 0, sidebarW, height());
+
+    if (m_sidebarOnRight) {
+        m_edgeTrigger->setGeometry(width() - kRightEdgeTriggerWidth, 0,
+                                   kRightEdgeTriggerWidth, height());
+    } else {
+        m_edgeTrigger->setGeometry(0, 0, kLeftEdgeTriggerWidth, height());
+    }
+    m_sidebar->show();
+    m_edgeTrigger->show();
+}
+
 void HomeView::applySidebarIcons()
 {
     if (m_searchAction)
@@ -2124,6 +2353,7 @@ void HomeView::syncSidebarVisibility()
 
     if (isImmersive)
     {
+        m_floatingSidebarShown = false;
         m_sidebar->hide();
         m_edgeTrigger->hide();
         return;
@@ -2131,25 +2361,14 @@ void HomeView::syncSidebarVisibility()
 
     if (m_sidebarPinned)
     {
+        m_floatingSidebarShown = false;
         m_sidebar->show();
         m_edgeTrigger->hide();
         return;
     }
 
-    const int sidebarW = m_sidebar->width();
-    if (m_sidebarOnRight)
-    {
-        m_sidebar->setGeometry(width() + kSidebarHiddenOffset, 0, sidebarW, height());
-        m_edgeTrigger->setGeometry(width() - kRightEdgeTriggerWidth, 0, kRightEdgeTriggerWidth, height());
-    }
-    else
-    {
-        m_sidebar->setGeometry(-sidebarW - kSidebarHiddenOffset, 0, sidebarW, height());
-        m_edgeTrigger->setGeometry(0, 0, kLeftEdgeTriggerWidth, height());
-    }
-
-    m_sidebar->show();
-    m_edgeTrigger->show();
+    m_floatingSidebarShown = false;
+    positionFloatingSidebar(false);
 }
 
 void HomeView::applySidebarPosition()
@@ -2175,35 +2394,13 @@ void HomeView::applySidebarPosition()
         return;
     }
 
-    const int sidebarW = m_sidebar->width();
-
-    
     if (auto *shadow = qobject_cast<QGraphicsDropShadowEffect *>(m_sidebar->graphicsEffect()))
     {
         shadow->setOffset(m_sidebarOnRight ? -4 : 4, 0);
     }
 
-    
-    if (m_sidebarOnRight)
-    {
-        m_edgeTrigger->setGeometry(width() - kRightEdgeTriggerWidth, 0, kRightEdgeTriggerWidth, height());
-    }
-    else
-    {
-        m_edgeTrigger->setGeometry(0, 0, kLeftEdgeTriggerWidth, height());
-    }
-
-    
-    if (m_sidebarAnim->state() == QAbstractAnimation::Running)
-        m_sidebarAnim->stop();
-    if (m_sidebarOnRight)
-    {
-        m_sidebar->setGeometry(width() + kSidebarHiddenOffset, 0, sidebarW, height());
-    }
-    else
-    {
-        m_sidebar->setGeometry(-sidebarW - kSidebarHiddenOffset, 0, sidebarW, height());
-    }
+    m_floatingSidebarShown = false;
+    positionFloatingSidebar(false);
 }
 
 
@@ -2216,6 +2413,7 @@ void HomeView::applySidebarPinned(bool pinned)
 
     if (pinned)
     {
+        m_floatingSidebarShown = false;
         
         if (m_sidebarAnim->state() == QAbstractAnimation::Running)
             m_sidebarAnim->stop();
@@ -2248,6 +2446,7 @@ void HomeView::applySidebarPinned(bool pinned)
     }
     else
     {
+        m_floatingSidebarShown = false;
         
         m_contentLayout->removeWidget(m_sidebar);
         m_sidebar->setParent(this); 

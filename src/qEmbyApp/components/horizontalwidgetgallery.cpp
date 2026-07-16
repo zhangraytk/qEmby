@@ -1,4 +1,5 @@
 #include "horizontalwidgetgallery.h"
+#include "../utils/wheelinput.h"
 #include <QScrollArea>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -6,6 +7,7 @@
 #include <QPropertyAnimation>
 #include <QEvent>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <QTimer>
 #include <QCursor>
 #include <QScroller>           
@@ -196,40 +198,79 @@ bool HorizontalWidgetGallery::eventFilter(QObject* obj, QEvent* event)
             m_btnRight->hide();
         }
     } else if (event->type() == QEvent::Wheel) {
-        
         QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
-        if (qAbs(wheelEvent->angleDelta().x()) > qAbs(wheelEvent->angleDelta().y())) {
-            
+        if (m_wheelAxisLock.axisFor(wheelEvent) ==
+            WheelInput::Axis::Horizontal) {
             QScrollBar* hBar = m_scrollArea->horizontalScrollBar();
             if (hBar) {
+                const int step = WheelInput::delta(wheelEvent, Qt::Horizontal);
+                if (step == 0) {
+                    wheelEvent->ignore();
+                    return false;
+                }
+                if (WheelInput::isPrecise(wheelEvent)) {
+                    m_hScrollAnim->stop();
+                    const int currentValue = hBar->value();
+                    const int nextValue = qBound(hBar->minimum(),
+                        currentValue - step, hBar->maximum());
+                    m_hScrollTarget = nextValue;
+                    if (nextValue == currentValue) {
+                        wheelEvent->ignore();
+                        return false;
+                    }
+                    hBar->setValue(nextValue);
+                    wheelEvent->accept();
+                    return true;
+                }
+
                 int currentVal = hBar->value();
                 if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
                     currentVal = m_hScrollTarget;
                 }
-                int step = wheelEvent->angleDelta().x();
                 int newTarget = currentVal - step;
                 newTarget = qBound(hBar->minimum(), newTarget, hBar->maximum());
 
-                if (newTarget != hBar->value()) {
-                    m_hScrollTarget = newTarget;
-                    m_hScrollAnim->stop();
-                    m_hScrollAnim->setStartValue(hBar->value());
-                    m_hScrollAnim->setEndValue(m_hScrollTarget);
-                    m_hScrollAnim->start();
+                if (newTarget == currentVal) {
+                    wheelEvent->ignore();
+                    return false;
                 }
+                m_hScrollTarget = newTarget;
+                m_hScrollAnim->stop();
+                m_hScrollAnim->setStartValue(hBar->value());
+                m_hScrollAnim->setEndValue(m_hScrollTarget);
+                m_hScrollAnim->start();
             }
-            return true; 
+            wheelEvent->accept();
+            return true;
         } else {
-            
             wheelEvent->ignore();
             return false;
+        }
+    }
+    if (event->type() == QEvent::NativeGesture) {
+        auto* gesture = static_cast<QNativeGestureEvent*>(event);
+        if (gesture->gestureType() == Qt::PanNativeGesture &&
+            qAbs(gesture->delta().x()) > qAbs(gesture->delta().y())) {
+            QScrollBar* bar = m_scrollArea->horizontalScrollBar();
+            const int currentValue = bar->value();
+            const int nextValue = qBound(bar->minimum(),
+                currentValue - qRound(gesture->delta().x()), bar->maximum());
+            if (nextValue == currentValue) {
+                gesture->ignore();
+                return false;
+            }
+            m_hScrollAnim->stop();
+            m_hScrollTarget = nextValue;
+            bar->setValue(nextValue);
+            gesture->accept();
+            return true;
         }
     }
     return QWidget::eventFilter(obj, event);
 }
 
 void HorizontalWidgetGallery::wheelEvent(QWheelEvent *event) {
-    if (qAbs(event->angleDelta().x()) <= qAbs(event->angleDelta().y())) {
+    if (WheelInput::dominantAxis(event) != WheelInput::Axis::Horizontal) {
         event->ignore();
     }
 }

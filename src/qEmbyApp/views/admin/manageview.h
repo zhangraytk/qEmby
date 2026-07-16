@@ -5,17 +5,19 @@
 #include <QLabel>
 #include <QList>
 #include <QListWidget>
-#include <QPropertyAnimation>
 #include <QScrollArea>
 #include <QVBoxLayout>
 
 class SlidingStackedWidget;
+class SmoothScrollController;
 
 class ManageView : public BaseView {
     Q_OBJECT
 public:
     explicit ManageView(QEmbyCore* core, QWidget* parent = nullptr);
     ~ManageView() override = default;
+    bool handleRemoteNavigation(NavigationCommand command) override;
+    void setRemoteFocusActive(bool active) override;
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -37,8 +39,7 @@ private:
 
     
     QList<QScrollArea*>        m_scrollAreas;
-    QList<QPropertyAnimation*> m_scrollAnims;
-    QList<int>                 m_scrollTargets;
+    QList<SmoothScrollController*> m_scrollControllers;
 };
 
 #endif 

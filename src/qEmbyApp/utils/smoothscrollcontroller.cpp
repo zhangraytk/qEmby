@@ -1,5 +1,7 @@
 #include "smoothscrollcontroller.h"
+#include "wheelinput.h"
 
+#include <QNativeGestureEvent>
 #include <QScrollBar>
 #include <QWheelEvent>
 #include <cmath>
@@ -98,13 +100,47 @@ bool SmoothScrollController::scrollByWheelEvent(const QWheelEvent *event,
         return false;
     }
 
-    const int delta = wheelDelta(event, orientation);
-    if (delta == 0) {
+    const int wheelValue = wheelDelta(event, orientation);
+    if (wheelValue == 0) {
+        return false;
+    }
+
+    return scrollByDelta(wheelValue, WheelInput::isPrecise(event));
+}
+
+bool SmoothScrollController::scrollByNativeGesture(
+    const QNativeGestureEvent *event, Qt::Orientation orientation)
+{
+    if (!event || event->gestureType() != Qt::PanNativeGesture) {
+        return false;
+    }
+
+    const QPointF value = event->delta();
+    const qreal gestureDelta =
+        orientation == Qt::Horizontal ? value.x() : value.y();
+    return scrollByDelta(gestureDelta, true);
+}
+
+bool SmoothScrollController::scrollByDelta(qreal delta, bool precise)
+{
+    if (!m_scrollBar || qFuzzyIsNull(delta)) {
         return false;
     }
 
     const int requestedStep = -qRound(delta * m_wheelMultiplier);
     if (requestedStep == 0) {
+        return false;
+    }
+
+    if (precise) {
+        m_ticker.stop();
+        const int currentValue = m_scrollBar->value();
+        const int nextValue = boundedValue(currentValue + requestedStep);
+        m_targetValue = nextValue;
+        if (nextValue == currentValue) {
+            return false;
+        }
+        m_scrollBar->setValue(nextValue);
         return true;
     }
 
@@ -117,6 +153,12 @@ bool SmoothScrollController::scrollByWheelEvent(const QWheelEvent *event,
         isReversing ? currentValue
                     : (m_ticker.isActive() ? m_targetValue : currentValue);
     const int nextTarget = boundedValue(baseValue + requestedStep);
+
+    // A wheel event at the hard edge belongs to the parent scroll area.  Do
+    // not report it as consumed merely because there is no animation running.
+    if (!m_ticker.isActive() && nextTarget == currentValue) {
+        return false;
+    }
 
     if (nextTarget != m_targetValue || !m_ticker.isActive()) {
         m_targetValue = nextTarget;
@@ -141,13 +183,7 @@ int SmoothScrollController::boundedValue(int value) const
 int SmoothScrollController::wheelDelta(const QWheelEvent *event,
                                        Qt::Orientation orientation) const
 {
-    const QPoint pixelDelta = event->pixelDelta();
-    if (!pixelDelta.isNull()) {
-        return orientation == Qt::Horizontal ? pixelDelta.x() : pixelDelta.y();
-    }
-
-    const QPoint angleDelta = event->angleDelta();
-    return orientation == Qt::Horizontal ? angleDelta.x() : angleDelta.y();
+    return WheelInput::delta(event, orientation);
 }
 
 void SmoothScrollController::startTicker()

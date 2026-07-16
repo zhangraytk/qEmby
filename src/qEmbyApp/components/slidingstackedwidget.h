@@ -32,6 +32,7 @@ public:
     void slideInIdx(int idx, SlideDirection direction = Automatic);
     void slideInWgt(QWidget *widget, SlideDirection direction = Automatic);
     void disposeWidgetWhenSafe(QWidget *widget);
+    void finishActiveTransition();
 
 Q_SIGNALS:
     

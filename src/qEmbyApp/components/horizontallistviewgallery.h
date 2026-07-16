@@ -6,6 +6,8 @@
 #include <QList>
 #include <QSize>
 #include <models/media/mediaitem.h>
+#include "../utils/inputnavigation.h"
+#include "../utils/wheelinput.h"
 
 class ShimmerWidget;
 #include "../views/media/mediacarddelegate.h"
@@ -14,6 +16,7 @@ class QEmbyCore;
 class QListView;
 class QPushButton;
 class QPropertyAnimation;
+class QNativeGestureEvent;
 class QWheelEvent;
 class MediaListModel; 
 
@@ -50,10 +53,14 @@ public:
     void scrollPreviousPage();
     void scrollNextPage();
     bool handleHorizontalWheel(QWheelEvent* event);
+    bool handleHorizontalPan(QNativeGestureEvent* event);
     bool moveFocus(int delta);
     bool activateFocusedItem();
     bool hasFocusedItem() const;
     int focusedRow() const;
+    QRect focusedItemGlobalRect(int padding = 6) const;
+    bool focusClosestInDirection(const QRect& sourceGlobalRect,
+                                 NavigationCommand command);
     void setFocusedRow(int row);
     void clearKeyboardFocus();
 
@@ -101,6 +108,7 @@ private:
     int m_hScrollTarget;
     int m_keyboardFocusRow = -1;
     bool m_keyboardFocusActive = false;
+    WheelInput::AxisLock m_wheelAxisLock;
 
     
     MediaCardDelegate::CardStyle m_cardStyle;

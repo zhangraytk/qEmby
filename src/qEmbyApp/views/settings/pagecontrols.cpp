@@ -11,11 +11,21 @@ PageControls::PageControls(QEmbyCore* core, QWidget* parent)
     m_mainLayout->addWidget(new SettingsCard(
         ":/svg/dark/general.svg",
         tr("Back Shortcut"),
-        tr("Click and press a shortcut; paste semicolon-separated alternatives if needed"),
+        tr("Capture a shortcut or type semicolon-separated alternatives"),
         backShortcutEdit,
         ConfigKeys::ShortcutNavigationBack,
         this,
         ShortcutUtils::defaultNavigationBackShortcuts()));
+
+    auto* forwardShortcutEdit = new ShortcutEdit(this);
+    m_mainLayout->addWidget(new SettingsCard(
+        ":/svg/dark/general.svg",
+        tr("Forward Shortcut"),
+        tr("Shortcut for moving forward through browsing history"),
+        forwardShortcutEdit,
+        ConfigKeys::ShortcutNavigationForward,
+        this,
+        ShortcutUtils::defaultNavigationForwardShortcuts()));
 
     auto* homeShortcutEdit = new ShortcutEdit(this);
     m_mainLayout->addWidget(new SettingsCard(
@@ -60,7 +70,7 @@ PageControls::PageControls(QEmbyCore* core, QWidget* parent)
     m_mainLayout->addWidget(new SettingsCard(
         ":/svg/dark/settings.svg",
         tr("Remote Focus Navigation"),
-        tr("Arrow keys move focus across home feeds; Enter, Space, or Select opens the focused card"),
+        tr("Direction and Select keys automatically show focus across browsing views; pointer input hides it"),
         nullptr,
         QString(),
         this));

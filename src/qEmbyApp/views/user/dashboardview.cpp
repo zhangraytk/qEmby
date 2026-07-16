@@ -8,9 +8,11 @@
 #include "../../utils/dashboardrequestlimitutils.h"
 #include "../../utils/dashboardsectionorderutils.h"
 #include "../../utils/mediaitemutils.h"
+#include "../../utils/inputnavigation.h"
 #include "../../utils/shortcututils.h"
 #include "../../utils/smoothscrollcontroller.h"
 #include "../../utils/textwraputils.h"
+#include "../../utils/wheelinput.h"
 #include "../media/mediacarddelegate.h"
 #include "../media/medialistmodel.h"
 #include <QApplication>
@@ -31,36 +33,18 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <utility>
 #include <vector>
 #include <config/config_keys.h>
 #include <config/configstore.h>
+#include <algorithm>
 #include <qembycore.h>
 #include <services/admin/adminservice.h>
 #include <services/manager/servermanager.h>
 #include <services/media/mediaservice.h>
 
 namespace {
-
-QPoint effectiveWheelDelta(QWheelEvent* event)
-{
-    if (!event) {
-        return {};
-    }
-
-    const QPoint pixelDelta = event->pixelDelta();
-    if (!pixelDelta.isNull()) {
-        return pixelDelta;
-    }
-
-    return event->angleDelta();
-}
-
-bool isDominantHorizontalWheel(QWheelEvent* event)
-{
-    const QPoint delta = effectiveWheelDelta(event);
-    return qAbs(delta.x()) > qAbs(delta.y());
-}
 
 bool isLibraryNavigationItem(const MediaItem& item)
 {
@@ -609,15 +593,44 @@ bool DashboardView::eventFilter(QObject* obj, QEvent* event)
         const bool isMainViewport = (obj == m_mainScrollArea->viewport());
 
         auto* we = static_cast<QWheelEvent*>(event);
-        if (isHorizontalViewport && isDominantHorizontalWheel(we)) {
+        const WheelInput::Axis axis = m_wheelAxisLock.axisFor(we);
+        if (isHorizontalViewport && axis == WheelInput::Axis::Horizontal) {
             return gallery->handleHorizontalWheel(we);
         }
 
-        if (isHorizontalViewport || isMainViewport) {
+        if ((isHorizontalViewport || isMainViewport) &&
+            axis == WheelInput::Axis::Vertical) {
             if (m_vScrollController) {
-                m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+                const bool handled =
+                    m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+                if (handled) {
+                    we->accept();
+                } else {
+                    we->ignore();
+                }
+                return handled;
             }
-            return true;
+        }
+        we->ignore();
+        return false;
+    }
+
+    if (event->type() == QEvent::NativeGesture) {
+        auto* gesture = static_cast<QNativeGestureEvent*>(event);
+        if (gesture->gestureType() != Qt::PanNativeGesture) {
+            return QWidget::eventFilter(obj, event);
+        }
+        HorizontalListViewGallery* gallery = galleryForObject(obj);
+        const bool horizontalViewport = gallery && gallery->listView() &&
+            obj == gallery->listView()->viewport();
+        if (horizontalViewport &&
+            qAbs(gesture->delta().x()) > qAbs(gesture->delta().y())) {
+            return gallery->handleHorizontalPan(gesture);
+        }
+        if ((horizontalViewport || obj == m_mainScrollArea->viewport()) &&
+            m_vScrollController) {
+            return m_vScrollController->scrollByNativeGesture(
+                gesture, Qt::Vertical);
         }
     }
 
@@ -656,20 +669,100 @@ bool DashboardView::triggerFeedShortcut(const QKeySequence& sequence)
 
 bool DashboardView::handleRemoteNavigationKey(int key)
 {
+    if (m_libraryRemoteFocusActive && m_libraryListView && m_libraryModel &&
+        m_libraryModel->rowCount() > 0) {
+        QModelIndex current = m_libraryListView->currentIndex();
+        if (!current.isValid()) {
+            current = m_libraryModel->index(0, 0);
+        }
+
+        if (key == Qt::Key_Return || key == Qt::Key_Enter ||
+            key == Qt::Key_Space || key == Qt::Key_Select ||
+            key == Qt::Key_Play || key == Qt::Key_MediaPlay ||
+            key == Qt::Key_MediaTogglePlayPause) {
+            if (!current.isValid()) {
+                return false;
+            }
+            const MediaItem item = m_libraryModel->getItem(current);
+            Q_EMIT navigateToLibrary(item.id, item.name);
+            return true;
+        }
+
+        const NavigationCommand command =
+            key == Qt::Key_Left ? NavigationCommand::Left
+          : key == Qt::Key_Right ? NavigationCommand::Right
+          : key == Qt::Key_Up ? NavigationCommand::Up
+          : key == Qt::Key_Down ? NavigationCommand::Down
+                                : NavigationCommand::Activate;
+        if (command == NavigationCommand::Activate) {
+            return false;
+        }
+
+        const QRect sourceRect = InputNavigation::itemGlobalRect(
+            m_libraryListView, current);
+        const QModelIndex next = InputNavigation::bestItemInDirection(
+            m_libraryListView, sourceRect, command);
+        if (!next.isValid() && command == NavigationCommand::Up) {
+            const auto galleries = visibleFeedGalleries();
+            if (!galleries.isEmpty() &&
+                galleries.last()->focusClosestInDirection(
+                    sourceRect, NavigationCommand::Up)) {
+                m_libraryRemoteFocusActive = false;
+                m_libraryListView->clearSelection();
+                m_libraryListView->setCurrentIndex(QModelIndex());
+                ensureRemoteFocusVisible(galleries.last());
+                return true;
+            }
+        }
+        if (!next.isValid()) {
+            return false;
+        }
+        m_libraryListView->selectionModel()->select(
+            next, QItemSelectionModel::ClearAndSelect |
+                  QItemSelectionModel::Rows);
+        m_libraryListView->setCurrentIndex(next);
+        if (m_libraryDelegate) {
+            m_libraryDelegate->animateRemoteFocus(
+                next, m_libraryListView->viewport());
+        }
+        ensureLibraryRemoteFocusVisible(next);
+        return true;
+    }
+
     HorizontalListViewGallery* gallery = activeFeedGallery();
     if (!gallery) {
         const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
         gallery = galleries.isEmpty() ? nullptr : galleries.first();
     }
     if (!gallery) {
-        return false;
+        if (!m_libraryGridSection || !m_libraryGridSection->isVisible() ||
+            !m_libraryListView || !m_libraryModel ||
+            m_libraryModel->rowCount() <= 0) {
+            return false;
+        }
+        m_libraryRemoteFocusActive = true;
+        const QModelIndex first = m_libraryModel->index(0, 0);
+        m_libraryListView->selectionModel()->select(
+            first, QItemSelectionModel::ClearAndSelect |
+                   QItemSelectionModel::Rows);
+        m_libraryListView->setCurrentIndex(first);
+        if (m_libraryDelegate) {
+            m_libraryDelegate->animateRemoteFocus(
+                first, m_libraryListView->viewport());
+        }
+        ensureLibraryRemoteFocusVisible(first);
+        return true;
     }
 
     if (key == Qt::Key_Left) {
-        return gallery->moveFocus(-1);
+        const bool moved = gallery->moveFocus(-1);
+        if (moved) ensureRemoteFocusVisible(gallery);
+        return moved;
     }
     if (key == Qt::Key_Right) {
-        return gallery->moveFocus(1);
+        const bool moved = gallery->moveFocus(1);
+        if (moved) ensureRemoteFocusVisible(gallery);
+        return moved;
     }
     if (key == Qt::Key_Return || key == Qt::Key_Enter ||
         key == Qt::Key_Space || key == Qt::Key_Select ||
@@ -682,7 +775,9 @@ bool DashboardView::handleRemoteNavigationKey(int key)
     }
 
     if (!gallery->hasFocusedItem()) {
-        return gallery->moveFocus(0);
+        const bool moved = gallery->moveFocus(0);
+        if (moved) ensureRemoteFocusVisible(gallery);
+        return moved;
     }
 
     const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
@@ -695,14 +790,89 @@ bool DashboardView::handleRemoteNavigationKey(int key)
         currentIndex = 0;
     } else {
         currentIndex += (key == Qt::Key_Up ? -1 : 1);
-        currentIndex = qBound(0, currentIndex, galleries.size() - 1);
+        if (currentIndex >= galleries.size() && key == Qt::Key_Down &&
+            m_libraryGridSection && m_libraryGridSection->isVisible() &&
+            m_libraryModel && m_libraryModel->rowCount() > 0) {
+            const QRect sourceRect = gallery->focusedItemGlobalRect(0);
+            QModelIndex index = InputNavigation::bestItemInDirection(
+                m_libraryListView, sourceRect, NavigationCommand::Down);
+            if (!index.isValid()) {
+                index = m_libraryModel->index(0, 0);
+            }
+            gallery->clearKeyboardFocus();
+            m_libraryRemoteFocusActive = true;
+            m_libraryListView->selectionModel()->select(
+                index, QItemSelectionModel::ClearAndSelect |
+                       QItemSelectionModel::Rows);
+            m_libraryListView->setCurrentIndex(index);
+            if (m_libraryDelegate) {
+                m_libraryDelegate->animateRemoteFocus(
+                    index, m_libraryListView->viewport());
+            }
+            ensureLibraryRemoteFocusVisible(index);
+            return true;
+        }
+        if (currentIndex < 0 || currentIndex >= galleries.size()) {
+            return false;
+        }
     }
 
     HorizontalListViewGallery* target = galleries.at(currentIndex);
-    const int row = gallery->focusedRow() >= 0 ? gallery->focusedRow() : 0;
+    const int previousRow = qMax(0, gallery->focusedRow());
+    const QRect sourceRect = gallery->focusedItemGlobalRect(0);
     gallery->clearKeyboardFocus();
-    target->setFocusedRow(row);
+    const NavigationCommand direction =
+        key == Qt::Key_Up ? NavigationCommand::Up
+                          : NavigationCommand::Down;
+    if (!target->focusClosestInDirection(sourceRect, direction)) {
+        gallery->setFocusedRow(previousRow);
+        return false;
+    }
+    ensureRemoteFocusVisible(target);
     return true;
+}
+
+void DashboardView::setRemoteFocusActive(bool active)
+{
+    setProperty("remoteFocusActive", active);
+    if (!active) {
+        clearFeedKeyboardFocuses();
+    }
+}
+
+void DashboardView::ensureRemoteFocusVisible(
+    HorizontalListViewGallery* gallery)
+{
+    if (!gallery || !m_mainScrollArea) {
+        return;
+    }
+    QRect target = gallery->focusedItemGlobalRect();
+    if (!target.isValid()) {
+        target = QRect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+    }
+    InputNavigation::ensureGlobalRectVisible(
+        m_mainScrollArea, target, m_vScrollController);
+
+    QPointer<HorizontalListViewGallery> safeGallery(gallery);
+    QTimer::singleShot(0, this, [this, safeGallery]() {
+        if (safeGallery && m_mainScrollArea) {
+            InputNavigation::ensureGlobalRectVisible(
+                m_mainScrollArea, safeGallery->focusedItemGlobalRect(),
+                m_vScrollController);
+        }
+    });
+}
+
+void DashboardView::ensureLibraryRemoteFocusVisible(
+    const QModelIndex& index)
+{
+    if (!m_libraryListView || !m_mainScrollArea || !index.isValid()) {
+        return;
+    }
+    InputNavigation::ensureGlobalRectVisible(
+        m_mainScrollArea,
+        InputNavigation::itemGlobalRect(m_libraryListView, index, 6),
+        m_vScrollController);
 }
 
 QList<HorizontalListViewGallery*> DashboardView::visibleFeedGalleries() const
@@ -729,6 +899,14 @@ QList<HorizontalListViewGallery*> DashboardView::visibleFeedGalleries() const
             appendIfUsable(section->gallery());
         }
     }
+
+    std::stable_sort(result.begin(), result.end(),
+                     [](HorizontalListViewGallery* first,
+                        HorizontalListViewGallery* second) {
+        const QPoint a = first->mapToGlobal(first->rect().center());
+        const QPoint b = second->mapToGlobal(second->rect().center());
+        return a.y() == b.y() ? a.x() < b.x() : a.y() < b.y();
+    });
 
     return result;
 }
@@ -826,6 +1004,11 @@ void DashboardView::clearFeedKeyboardFocuses()
     const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
     for (HorizontalListViewGallery* gallery : galleries) {
         gallery->clearKeyboardFocus();
+    }
+    m_libraryRemoteFocusActive = false;
+    if (m_libraryListView) {
+        m_libraryListView->clearSelection();
+        m_libraryListView->setCurrentIndex(QModelIndex());
     }
 }
 

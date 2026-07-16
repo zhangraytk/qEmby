@@ -111,4 +111,11 @@ add_subdirectory(libs/qwindowkit/examples/shared)
 add_subdirectory(src/qEmbyCore)
 add_subdirectory(src/qEmbyApp)
 
+option(QEMBY_BUILD_TESTS "Build qEmby input and navigation tests" OFF)
+if(QEMBY_BUILD_TESTS)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 include(QEmbyPackaging)

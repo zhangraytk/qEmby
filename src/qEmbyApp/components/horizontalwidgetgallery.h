@@ -2,6 +2,7 @@
 #define HORIZONTALWIDGETGALLERY_H
 
 #include <QWidget>
+#include "../utils/wheelinput.h"
 
 class QScrollArea;
 class QHBoxLayout;
@@ -52,6 +53,7 @@ private:
     
     QPropertyAnimation* m_hScrollAnim;
     int m_hScrollTarget;
+    WheelInput::AxisLock m_wheelAxisLock;
 };
 
 #endif 

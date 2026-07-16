@@ -5,6 +5,7 @@
 #include <QPoint> 
 #include <models/media/mediaitem.h>
 #include "../views/media/mediacarddelegate.h" 
+#include "../utils/wheelinput.h"
 
 class QEmbyCore;
 class QListView;
@@ -38,6 +39,10 @@ public:
     
     int saveScrollPosition() const;
     void restoreScrollPosition(int pos);
+    bool moveRemoteFocus(int horizontalDelta, int verticalDelta);
+    bool activateRemoteFocus();
+    bool hasRemoteFocus() const;
+    void clearRemoteFocus();
 
 Q_SIGNALS:
     void itemClicked(const MediaItem& item);
@@ -68,6 +73,8 @@ private:
     MediaCardDelegate* m_listDelegate;
 
     SmoothScrollController* m_vScrollController;
+    WheelInput::AxisLock m_wheelAxisLock;
+    bool m_remoteFocusActive = false;
 
     
     ShimmerWidget* m_shimmer = nullptr;

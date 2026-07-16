@@ -20,6 +20,9 @@ int keyAlias(const QString& token)
     if (key == QStringLiteral("back")) {
         return Qt::Key_Back;
     }
+    if (key == QStringLiteral("forward")) {
+        return Qt::Key_Forward;
+    }
     if (key == QStringLiteral("backspace") || key == QStringLiteral("bs")) {
         return Qt::Key_Backspace;
     }
@@ -128,7 +131,7 @@ bool parseAliasSequence(const QString& text, QKeySequence* out)
     return true;
 }
 
-} 
+}
 
 namespace ShortcutUtils
 {
@@ -223,6 +226,32 @@ QString defaultNavigationBackShortcuts()
     append(QStringLiteral("Back"));
     append(QStringLiteral("Esc"));
 
+    return shortcuts.join(QStringLiteral("; "));
+}
+
+QString defaultNavigationForwardShortcuts()
+{
+    QStringList shortcuts;
+    QSet<QString> seen;
+    auto append = [&shortcuts, &seen](const QString& value) {
+        const QString trimmed = value.trimmed();
+        if (!trimmed.isEmpty() && !seen.contains(trimmed)) {
+            seen.insert(trimmed);
+            shortcuts.append(trimmed);
+        }
+    };
+
+    const auto systemForward = QKeySequence::keyBindings(QKeySequence::Forward);
+    for (const QKeySequence& sequence : systemForward) {
+        append(sequence.toString(QKeySequence::PortableText));
+    }
+#if defined(Q_OS_MACOS) || defined(Q_OS_MAC)
+    append(QStringLiteral("Meta+Right"));
+    append(QStringLiteral("Meta+]"));
+#else
+    append(QStringLiteral("Alt+Right"));
+#endif
+    append(QStringLiteral("Forward"));
     return shortcuts.join(QStringLiteral("; "));
 }
 

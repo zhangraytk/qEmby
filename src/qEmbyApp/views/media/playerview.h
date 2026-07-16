@@ -6,6 +6,7 @@
 #include "../../components/modernslider.h"
 #include "../../components/loadingoverlay.h" 
 #include "../../components/playerdanmakucontroller.h"
+#include "../../utils/wheelinput.h"
 #include <models/media/mediaitem.h>
 #include <services/introdb/introdbservice.h>
 
@@ -41,6 +42,7 @@ public:
     explicit PlayerView(QEmbyCore *core, QWidget *parent = nullptr);
     ~PlayerView() override;
     void prepareForStackLeave() override;
+    bool handleBackNavigation() override;
 
     
     void playMedia(const QString &mediaId, const QString &title, const QString &streamUrl, long long startPositionTicks = 0, const QVariant& sourceInfoVar = QVariant());
@@ -236,6 +238,7 @@ private:
     
     QPushButton *m_volumeBtn;
     ModernSlider *m_volumeSlider;
+    WheelInput::StepAccumulator m_volumeWheelAccumulator;
 
     QLabel *m_toastLabel;
     QTimer *m_toastTimer;

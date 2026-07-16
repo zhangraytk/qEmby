@@ -1,5 +1,7 @@
 #include "favoritesview.h"
 #include "../../utils/smoothscrollcontroller.h"
+#include "../../utils/inputnavigation.h"
+#include "../../utils/wheelinput.h"
 #include <qembycore.h>
 #include <services/media/mediaservice.h>
 #include <config/configstore.h>
@@ -15,35 +17,13 @@
 #include <QScrollBar>
 #include <QShowEvent>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <QDebug>
 #include <QPointer> 
 #include <QApplication>
 #include <QCursor>
-
-namespace
-{
-
-QPoint effectiveWheelDelta(QWheelEvent* event)
-{
-    if (!event) {
-        return {};
-    }
-
-    const QPoint pixelDelta = event->pixelDelta();
-    if (!pixelDelta.isNull()) {
-        return pixelDelta;
-    }
-
-    return event->angleDelta();
-}
-
-bool isDominantHorizontalWheel(QWheelEvent* event)
-{
-    const QPoint delta = effectiveWheelDelta(event);
-    return qAbs(delta.x()) > qAbs(delta.y());
-}
-
-}
+#include <QTimer>
+#include <algorithm>
 
 FavoritesView::FavoritesView(QEmbyCore* core, QWidget *parent)
     : BaseView(core, parent), m_vScrollController(nullptr)
@@ -194,15 +174,44 @@ bool FavoritesView::eventFilter(QObject* obj, QEvent* event)
         bool isMainViewport = (obj == m_mainScrollArea->viewport());
 
         QWheelEvent* we = static_cast<QWheelEvent*>(event);
-        if (isHorizontalViewport && isDominantHorizontalWheel(we)) {
+        const WheelInput::Axis axis = m_wheelAxisLock.axisFor(we);
+        if (isHorizontalViewport && axis == WheelInput::Axis::Horizontal) {
             return gallery->handleHorizontalWheel(we);
         }
 
-        if (isHorizontalViewport || isMainViewport) {
+        if ((isHorizontalViewport || isMainViewport) &&
+            axis == WheelInput::Axis::Vertical) {
             if (m_vScrollController) {
-                m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+                const bool handled =
+                    m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+                if (handled) {
+                    we->accept();
+                } else {
+                    we->ignore();
+                }
+                return handled;
             }
-            return true;
+        }
+        we->ignore();
+        return false;
+    }
+
+    if (event->type() == QEvent::NativeGesture) {
+        auto* gesture = static_cast<QNativeGestureEvent*>(event);
+        if (gesture->gestureType() != Qt::PanNativeGesture) {
+            return QWidget::eventFilter(obj, event);
+        }
+        HorizontalListViewGallery* gallery = galleryForObject(obj);
+        const bool horizontalViewport = gallery && gallery->listView() &&
+            obj == gallery->listView()->viewport();
+        if (horizontalViewport &&
+            qAbs(gesture->delta().x()) > qAbs(gesture->delta().y())) {
+            return gallery->handleHorizontalPan(gesture);
+        }
+        if ((horizontalViewport || obj == m_mainScrollArea->viewport()) &&
+            m_vScrollController) {
+            return m_vScrollController->scrollByNativeGesture(
+                gesture, Qt::Vertical);
         }
     }
 
@@ -221,10 +230,14 @@ bool FavoritesView::handleRemoteNavigationKey(int key)
     }
 
     if (key == Qt::Key_Left) {
-        return gallery->moveFocus(-1);
+        const bool moved = gallery->moveFocus(-1);
+        if (moved) ensureRemoteFocusVisible(gallery);
+        return moved;
     }
     if (key == Qt::Key_Right) {
-        return gallery->moveFocus(1);
+        const bool moved = gallery->moveFocus(1);
+        if (moved) ensureRemoteFocusVisible(gallery);
+        return moved;
     }
     if (key == Qt::Key_Return || key == Qt::Key_Enter ||
         key == Qt::Key_Space || key == Qt::Key_Select ||
@@ -237,7 +250,9 @@ bool FavoritesView::handleRemoteNavigationKey(int key)
     }
 
     if (!gallery->hasFocusedItem()) {
-        return gallery->moveFocus(0);
+        const bool moved = gallery->moveFocus(0);
+        if (moved) ensureRemoteFocusVisible(gallery);
+        return moved;
     }
 
     const QList<HorizontalListViewGallery*> galleries = visibleFeedGalleries();
@@ -250,14 +265,55 @@ bool FavoritesView::handleRemoteNavigationKey(int key)
         currentIndex = 0;
     } else {
         currentIndex += (key == Qt::Key_Up ? -1 : 1);
-        currentIndex = qBound(0, currentIndex, galleries.size() - 1);
+        if (currentIndex < 0 || currentIndex >= galleries.size()) {
+            return false;
+        }
     }
 
     HorizontalListViewGallery* target = galleries.at(currentIndex);
-    const int row = gallery->focusedRow() >= 0 ? gallery->focusedRow() : 0;
+    const int previousRow = qMax(0, gallery->focusedRow());
+    const QRect sourceRect = gallery->focusedItemGlobalRect(0);
     gallery->clearKeyboardFocus();
-    target->setFocusedRow(row);
+    const NavigationCommand direction =
+        key == Qt::Key_Up ? NavigationCommand::Up
+                          : NavigationCommand::Down;
+    if (!target->focusClosestInDirection(sourceRect, direction)) {
+        gallery->setFocusedRow(previousRow);
+        return false;
+    }
+    ensureRemoteFocusVisible(target);
     return true;
+}
+
+void FavoritesView::setRemoteFocusActive(bool active)
+{
+    setProperty("remoteFocusActive", active);
+    if (!active) {
+        clearFeedKeyboardFocuses();
+    }
+}
+
+void FavoritesView::ensureRemoteFocusVisible(
+    HorizontalListViewGallery* gallery)
+{
+    if (!gallery || !m_mainScrollArea) {
+        return;
+    }
+    QRect target = gallery->focusedItemGlobalRect();
+    if (!target.isValid()) {
+        target = QRect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+    }
+    InputNavigation::ensureGlobalRectVisible(
+        m_mainScrollArea, target, m_vScrollController);
+
+    QPointer<HorizontalListViewGallery> safeGallery(gallery);
+    QTimer::singleShot(0, this, [this, safeGallery]() {
+        if (safeGallery && m_mainScrollArea) {
+            InputNavigation::ensureGlobalRectVisible(
+                m_mainScrollArea, safeGallery->focusedItemGlobalRect(),
+                m_vScrollController);
+        }
+    });
 }
 
 QList<HorizontalListViewGallery*> FavoritesView::visibleFeedGalleries() const
@@ -277,6 +333,14 @@ QList<HorizontalListViewGallery*> FavoritesView::visibleFeedGalleries() const
             result.append(gallery);
         }
     }
+
+    std::stable_sort(result.begin(), result.end(),
+                     [](HorizontalListViewGallery* first,
+                        HorizontalListViewGallery* second) {
+        const QPoint a = first->mapToGlobal(first->rect().center());
+        const QPoint b = second->mapToGlobal(second->rect().center());
+        return a.y() == b.y() ? a.x() < b.x() : a.y() < b.y();
+    });
 
     return result;
 }

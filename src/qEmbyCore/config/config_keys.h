@@ -68,6 +68,7 @@ constexpr const char* SearchAutocompleteEnabled = "appearance/search_autocomplet
 
 
 constexpr const char* ShortcutNavigationBack = "shortcuts/navigation_back";
+constexpr const char* ShortcutNavigationForward = "shortcuts/navigation_forward";
 constexpr const char* ShortcutNavigationHome = "shortcuts/navigation_home";
 constexpr const char* ShortcutNavigationFavorites =
     "shortcuts/navigation_favorites";

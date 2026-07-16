@@ -57,6 +57,7 @@ private:
     QPoint m_lastPos;
     qint64 m_lastTime = 0;
     qreal m_dragVelocity = 0.0;
+    qreal m_wheelRemainder = 0.0;
 };
 
 #endif 

@@ -11,6 +11,7 @@
 #include "../../utils/mediaitemutils.h"
 #include "../../utils/mediasourcepreferenceutils.h"
 #include "../../utils/playerpreferenceutils.h"
+#include "../../utils/wheelinput.h"
 #include "../../utils/powerinhibitutils.h"
 #include "../../utils/subtitlestyleutils.h"
 #include "qembycore.h"
@@ -2586,7 +2587,9 @@ void PlayerView::keyPressEvent(QKeyEvent *event)
         showControls();
         event->accept();
     }
-    else if (event->key() == Qt::Key_Space)
+    else if (event->key() == Qt::Key_Space ||
+             event->key() == Qt::Key_Select ||
+             InputNavigation::isPlayPauseKey(event->key()))
     {
         if (!event->isAutoRepeat())
         {
@@ -3038,7 +3041,21 @@ bool PlayerView::eventFilter(QObject *watched, QEvent *event)
         {
             showControls();
             auto *we = static_cast<QWheelEvent *>(event);
-            changeVolume(we->angleDelta().y() > 0 ? 5 : -5);
+            const int value = WheelInput::delta(we, Qt::Vertical);
+            if (value == 0) {
+                m_volumeWheelAccumulator.consume(0.0, we->phase());
+                we->ignore();
+                return false;
+            }
+
+            const qreal divisor = WheelInput::isPrecise(we) ? 40.0 : 120.0;
+            const qreal increment = value / divisor;
+            const int steps = m_volumeWheelAccumulator.consume(
+                increment, we->phase());
+            if (steps != 0) {
+                changeVolume(steps * 5);
+            }
+            we->accept();
             return true;
         }
     }
@@ -5100,8 +5117,11 @@ void PlayerView::onBackClicked()
         return;
     }
 
-    
-    
+    if (handleBackNavigation())
+    {
+        return;
+    }
+
     prepareForStackLeave();
     Q_EMIT navigateBack();
 
@@ -5148,6 +5168,44 @@ void PlayerView::onBackClicked()
                                }
                            });
     }
+}
+
+bool PlayerView::handleBackNavigation()
+{
+    if (m_activePlayerDialog && m_activePlayerDialog->isVisible())
+    {
+        m_activePlayerDialog->close();
+        return true;
+    }
+
+    if (m_activePopup)
+    {
+        m_activePopup->close();
+        m_activePopup->deleteLater();
+        m_activePopup = nullptr;
+        return true;
+    }
+
+    if (m_mediaSwitchDrawer && m_mediaSwitchDrawer->isVisible())
+    {
+        hideHudMediaSwitcher();
+        return true;
+    }
+
+    if (m_isRightSidebarVisible)
+    {
+        hideRightSidebar();
+        return true;
+    }
+
+    if (window() && window()->isFullScreen())
+    {
+        window()->showNormal();
+        showControls();
+        return true;
+    }
+
+    return false;
 }
 
 void PlayerView::onPositionChanged(double position)

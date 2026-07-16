@@ -1,7 +1,9 @@
 #include "mediagridwidget.h"
 #include "shimmerwidget.h"
 #include "../utils/smoothscrollcontroller.h"
+#include "../utils/inputnavigation.h"
 #include "../utils/textwraputils.h"
+#include "../utils/wheelinput.h"
 #include "../views/media/medialistmodel.h"
 #include <QVBoxLayout>
 #include <QListView>
@@ -11,6 +13,7 @@
 #include <QScroller>
 #include <QScrollerProperties>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <QScrollBar>
 #include <QSet>
 #include <QStyleOptionViewItem>
@@ -24,7 +27,7 @@ MediaGridWidget::MediaGridWidget(QEmbyCore* core, QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
 
     m_listView = new QListView(this);
-    m_listView->setSelectionMode(QAbstractItemView::NoSelection);
+    m_listView->setSelectionMode(QAbstractItemView::SingleSelection);
     m_listView->setViewMode(QListView::IconMode);
     m_listView->setResizeMode(QListView::Adjust);
     m_listView->setMovement(QListView::Static);
@@ -221,6 +224,74 @@ void MediaGridWidget::restoreScrollPosition(int pos) {
     }
 }
 
+bool MediaGridWidget::moveRemoteFocus(int horizontalDelta, int verticalDelta)
+{
+    if (!m_listView || !m_listModel || m_listModel->rowCount() <= 0) {
+        return false;
+    }
+
+    const bool wasRemoteFocusActive = m_remoteFocusActive;
+    QModelIndex index;
+    if (!wasRemoteFocusActive || !m_listView->currentIndex().isValid()) {
+        index = m_listModel->index(0, 0);
+    } else {
+        const NavigationCommand command =
+            horizontalDelta < 0 ? NavigationCommand::Left
+          : horizontalDelta > 0 ? NavigationCommand::Right
+          : verticalDelta < 0 ? NavigationCommand::Up
+          : verticalDelta > 0 ? NavigationCommand::Down
+                              : NavigationCommand::Activate;
+        if (command == NavigationCommand::Activate) {
+            return false;
+        }
+        const QRect sourceRect = InputNavigation::itemGlobalRect(
+            m_listView, m_listView->currentIndex());
+        index = InputNavigation::bestItemInDirection(
+            m_listView, sourceRect, command);
+        if (!index.isValid()) {
+            return false;
+        }
+    }
+
+    m_remoteFocusActive = true;
+    m_listView->selectionModel()->select(
+        index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    m_listView->setCurrentIndex(index);
+    if (m_listDelegate) {
+        m_listDelegate->animateRemoteFocus(index, m_listView->viewport());
+    }
+    InputNavigation::ensureItemVisible(m_listView, index,
+                                       m_vScrollController);
+    m_listView->viewport()->update();
+    return true;
+}
+
+bool MediaGridWidget::activateRemoteFocus()
+{
+    if (!hasRemoteFocus() || !m_listModel) {
+        return false;
+    }
+    Q_EMIT itemClicked(m_listModel->getItem(m_listView->currentIndex()));
+    return true;
+}
+
+bool MediaGridWidget::hasRemoteFocus() const
+{
+    return m_remoteFocusActive && m_listView &&
+           m_listView->currentIndex().isValid();
+}
+
+void MediaGridWidget::clearRemoteFocus()
+{
+    m_remoteFocusActive = false;
+    if (!m_listView) {
+        return;
+    }
+    m_listView->clearSelection();
+    m_listView->setCurrentIndex(QModelIndex());
+    m_listView->viewport()->update();
+}
+
 void MediaGridWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     adjustGrid();
@@ -240,11 +311,31 @@ bool MediaGridWidget::eventFilter(QObject* obj, QEvent* event) {
     
     if (event->type() == QEvent::Wheel && obj == m_listView->viewport()) {
         QWheelEvent* we = static_cast<QWheelEvent*>(event);
-        if (qAbs(we->angleDelta().y()) >= qAbs(we->angleDelta().x())) {
+        if (m_wheelAxisLock.axisFor(we) == WheelInput::Axis::Vertical) {
             if (m_vScrollController) {
-                m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+                const bool handled =
+                    m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+                if (handled) {
+                    we->accept();
+                } else {
+                    we->ignore();
+                }
+                return handled;
             }
-            return true;
+        }
+        we->ignore();
+        return false;
+    }
+    if (event->type() == QEvent::NativeGesture &&
+        obj == m_listView->viewport()) {
+        auto* gesture = static_cast<QNativeGestureEvent*>(event);
+        if (gesture->gestureType() == Qt::PanNativeGesture &&
+            qAbs(gesture->delta().y()) >= qAbs(gesture->delta().x()) &&
+            m_vScrollController) {
+            const bool handled = m_vScrollController->scrollByNativeGesture(
+                gesture, Qt::Vertical);
+            if (handled) gesture->accept(); else gesture->ignore();
+            return handled;
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -357,13 +448,6 @@ void MediaGridWidget::adjustGrid() {
     
     m_listView->doItemsLayout();
 }
-
-
-
-
-
-
-
 
 
 

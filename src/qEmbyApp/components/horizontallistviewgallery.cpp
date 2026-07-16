@@ -1,6 +1,8 @@
 #include "horizontallistviewgallery.h"
 #include "shimmerwidget.h"
+#include "../utils/inputnavigation.h"
 #include "../utils/textwraputils.h"
+#include "../utils/wheelinput.h"
 #include "../views/media/medialistmodel.h"
 #include <QListView>
 #include <QVBoxLayout>
@@ -9,6 +11,7 @@
 #include <QPropertyAnimation>
 #include <QEvent>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <QCursor>
 #include <QScroller>           
 #include <QScrollerProperties> 
@@ -17,31 +20,6 @@
 #include <QDebug>
 #include <QSet>
 #include <algorithm>
-
-namespace
-{
-
-QPoint effectiveWheelDelta(QWheelEvent* event)
-{
-    if (!event) {
-        return {};
-    }
-
-    const QPoint pixelDelta = event->pixelDelta();
-    if (!pixelDelta.isNull()) {
-        return pixelDelta;
-    }
-
-    return event->angleDelta();
-}
-
-bool isDominantHorizontalWheel(QWheelEvent* event)
-{
-    const QPoint delta = effectiveWheelDelta(event);
-    return qAbs(delta.x()) > qAbs(delta.y());
-}
-
-}
 
 HorizontalListViewGallery::HorizontalListViewGallery(QEmbyCore* core, QWidget* parent)
     : QWidget(parent), m_core(core), m_hScrollAnim(nullptr), m_hScrollTarget(0), m_cardStyle(MediaCardDelegate::Poster)
@@ -92,7 +70,7 @@ HorizontalListViewGallery::HorizontalListViewGallery(QEmbyCore* core, QWidget* p
     
     m_hScrollAnim = new QPropertyAnimation(m_listView->horizontalScrollBar(), "value", this);
     m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
-    m_hScrollAnim->setDuration(450);
+    m_hScrollAnim->setDuration(220);
 
     mainLayout->addWidget(m_listView);
 
@@ -379,7 +357,8 @@ void HorizontalListViewGallery::scrollNextPage()
 
 bool HorizontalListViewGallery::handleHorizontalWheel(QWheelEvent* event)
 {
-    if (!event || !isDominantHorizontalWheel(event)) {
+    if (!event ||
+        m_wheelAxisLock.axisFor(event) != WheelInput::Axis::Horizontal) {
         if (event) {
             event->ignore();
         }
@@ -399,22 +378,73 @@ bool HorizontalListViewGallery::handleHorizontalWheel(QWheelEvent* event)
         return false;
     }
 
+    const int step = WheelInput::delta(event, Qt::Horizontal);
+    if (step == 0) {
+        event->ignore();
+        return false;
+    }
+
+    if (WheelInput::isPrecise(event)) {
+        m_hScrollAnim->stop();
+        const int currentValue = hBar->value();
+        const int nextValue = qBound(hBar->minimum(), currentValue - step,
+                                     hBar->maximum());
+        m_hScrollTarget = nextValue;
+        if (nextValue == currentValue) {
+            event->ignore();
+            return false;
+        }
+        hBar->setValue(nextValue);
+        event->accept();
+        return true;
+    }
+
     int currentVal = hBar->value();
     if (m_hScrollAnim->state() == QAbstractAnimation::Running) {
         currentVal = m_hScrollTarget;
     }
 
-    const int step = effectiveWheelDelta(event).x();
     const int newTarget =
         qBound(hBar->minimum(), currentVal - step, hBar->maximum());
-    if (newTarget != hBar->value()) {
-        m_hScrollTarget = newTarget;
-        m_hScrollAnim->stop();
-        m_hScrollAnim->setStartValue(hBar->value());
-        m_hScrollAnim->setEndValue(m_hScrollTarget);
-        m_hScrollAnim->start();
+    if (newTarget == currentVal) {
+        event->ignore();
+        return false;
     }
 
+    m_hScrollTarget = newTarget;
+    m_hScrollAnim->stop();
+    m_hScrollAnim->setDuration(220);
+    m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
+    m_hScrollAnim->setStartValue(hBar->value());
+    m_hScrollAnim->setEndValue(m_hScrollTarget);
+    m_hScrollAnim->start();
+
+    event->accept();
+    return true;
+}
+
+bool HorizontalListViewGallery::handleHorizontalPan(QNativeGestureEvent* event)
+{
+    if (!event || event->gestureType() != Qt::PanNativeGesture ||
+        qAbs(event->delta().x()) <= qAbs(event->delta().y()) || !m_listView) {
+        return false;
+    }
+
+    QScrollBar* bar = m_listView->horizontalScrollBar();
+    if (!bar) {
+        return false;
+    }
+
+    m_hScrollAnim->stop();
+    const int currentValue = bar->value();
+    const int nextValue = qBound(bar->minimum(),
+                                 currentValue - qRound(event->delta().x()),
+                                 bar->maximum());
+    m_hScrollTarget = nextValue;
+    if (nextValue == currentValue) {
+        return false;
+    }
+    bar->setValue(nextValue);
     event->accept();
     return true;
 }
@@ -427,11 +457,12 @@ bool HorizontalListViewGallery::moveFocus(int delta)
 
     int row = m_keyboardFocusActive ? m_keyboardFocusRow : -1;
     if (row < 0) {
-        const QModelIndex index = m_listView->indexAt(
-            QPoint(qMax(0, m_listView->viewport()->width() / 2), 1));
-        row = index.isValid() ? index.row() : 0;
+        row = 0;
     } else {
         row += delta;
+        if (row < 0 || row >= m_listModel->rowCount()) {
+            return false;
+        }
     }
 
     setKeyboardFocusRow(row, true);
@@ -461,6 +492,33 @@ bool HorizontalListViewGallery::hasFocusedItem() const
 int HorizontalListViewGallery::focusedRow() const
 {
     return hasFocusedItem() ? m_keyboardFocusRow : -1;
+}
+
+QRect HorizontalListViewGallery::focusedItemGlobalRect(int padding) const
+{
+    if (!hasFocusedItem() || !m_listView || !m_listModel) {
+        return {};
+    }
+    return InputNavigation::itemGlobalRect(
+        m_listView, m_listModel->index(m_keyboardFocusRow, 0), padding);
+}
+
+bool HorizontalListViewGallery::focusClosestInDirection(
+    const QRect& sourceGlobalRect, NavigationCommand command)
+{
+    if (!m_listView || !m_listModel || !sourceGlobalRect.isValid()) {
+        return false;
+    }
+    m_listView->doItemsLayout();
+    const QModelIndex index = InputNavigation::bestItemInDirection(
+        m_listView, sourceGlobalRect, command);
+    if (!index.isValid()) {
+        return false;
+    }
+    // The candidate was chosen from its current on-screen geometry. Preserve
+    // that horizontal alignment when crossing rows instead of re-pivoting it.
+    setKeyboardFocusRow(index.row(), false);
+    return true;
 }
 
 void HorizontalListViewGallery::setFocusedRow(int row)
@@ -502,8 +560,32 @@ void HorizontalListViewGallery::setKeyboardFocusRow(int row, bool center)
     m_listView->selectionModel()->select(
         index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
     m_listView->setCurrentIndex(index);
-    m_listView->scrollTo(index, center ? QAbstractItemView::PositionAtCenter
-                                       : QAbstractItemView::EnsureVisible);
+    if (m_listDelegate) {
+        m_listDelegate->animateRemoteFocus(index, m_listView->viewport());
+    }
+
+    if (center && m_hScrollAnim) {
+        m_listView->doItemsLayout();
+        const QRect itemRect = m_listView->visualRect(index);
+        QScrollBar* bar = m_listView->horizontalScrollBar();
+        if (bar && itemRect.isValid()) {
+            // TV lists keep the focused card near a stable leading pivot.
+            // The first card naturally clamps to the left edge.
+            const int pivot = qRound(m_listView->viewport()->width() * 0.30);
+            const int target = qBound(
+                bar->minimum(), bar->value() + itemRect.left() - pivot,
+                bar->maximum());
+            if (target != bar->value()) {
+                m_hScrollTarget = target;
+                m_hScrollAnim->stop();
+                m_hScrollAnim->setDuration(180);
+                m_hScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
+                m_hScrollAnim->setStartValue(bar->value());
+                m_hScrollAnim->setEndValue(target);
+                m_hScrollAnim->start();
+            }
+        }
+    }
     m_listView->viewport()->update();
 }
 
@@ -533,6 +615,7 @@ void HorizontalListViewGallery::scrollPage(int directionMultiplier)
 
     m_hScrollTarget = targetValue;
     m_hScrollAnim->stop();
+    m_hScrollAnim->setDuration(400);
     m_hScrollAnim->setStartValue(bar->value());
     m_hScrollAnim->setEndValue(m_hScrollTarget);
     m_hScrollAnim->start();
@@ -623,6 +706,9 @@ bool HorizontalListViewGallery::eventFilter(QObject* obj, QEvent* event)
     } else if (event->type() == QEvent::Wheel) {
         QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
         return handleHorizontalWheel(wheelEvent);
+    } else if (event->type() == QEvent::NativeGesture) {
+        auto* gestureEvent = static_cast<QNativeGestureEvent*>(event);
+        return handleHorizontalPan(gestureEvent);
     }
     return QWidget::eventFilter(obj, event);
 }

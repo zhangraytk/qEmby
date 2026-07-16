@@ -15,14 +15,17 @@
 #include "../components/downloadmanagerdialog.h"
 #include "../components/modernmessagebox.h"
 #include "../components/moderntoast.h" 
+#include "../components/mediagridwidget.h"
 #include "../managers/downloadmanager.h"
 #include "../managers/playbackmanager.h" 
 #include "../utils/mediaitemutils.h"
 #include "../utils/mediasourcepreferenceutils.h"
 #include "../utils/mediaidentifyutils.h"
 #include "../utils/playerpreferenceutils.h"
+#include "../utils/inputnavigation.h"
 #include "../utils/playlistutils.h"
 #include <QDateTime>
+#include <QApplication>
 #include <QDialog>
 #include <QDebug>
 #include <QJsonArray>
@@ -49,6 +52,67 @@ BaseView::BaseView(QEmbyCore* core, QWidget *parent)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setProperty("showGlobalSearch", true);
+}
+
+bool BaseView::handleRemoteNavigation(NavigationCommand command)
+{
+    const auto grids = findChildren<MediaGridWidget*>();
+    if (command == NavigationCommand::Activate) {
+        for (MediaGridWidget* grid : grids) {
+            if (grid->isVisibleTo(this) && grid->hasRemoteFocus()) {
+                return grid->activateRemoteFocus();
+            }
+        }
+        return InputNavigation::activateFocusedWidget(this);
+    }
+
+    if (command != NavigationCommand::Left &&
+        command != NavigationCommand::Right &&
+        command != NavigationCommand::Up &&
+        command != NavigationCommand::Down) {
+        return false;
+    }
+
+    QWidget* focused = QApplication::focusWidget();
+    if (focused && (focused == this || isAncestorOf(focused)) &&
+        InputNavigation::moveSpatialFocus(this, command)) {
+        return true;
+    }
+
+    const int horizontal = command == NavigationCommand::Left ? -1
+                         : command == NavigationCommand::Right ? 1 : 0;
+    const int vertical = command == NavigationCommand::Up ? -1
+                       : command == NavigationCommand::Down ? 1 : 0;
+    for (MediaGridWidget* grid : grids) {
+        if (grid->isVisibleTo(this) && grid->hasRemoteFocus() &&
+            grid->moveRemoteFocus(horizontal, vertical)) {
+            return true;
+        }
+    }
+    for (MediaGridWidget* grid : grids) {
+        if (grid->isVisibleTo(this) &&
+            grid->moveRemoteFocus(horizontal, vertical)) {
+            return true;
+        }
+    }
+    return InputNavigation::moveSpatialFocus(this, command);
+}
+
+void BaseView::setRemoteFocusActive(bool active)
+{
+    setProperty("remoteFocusActive", active);
+    if (active) {
+        return;
+    }
+
+    const auto grids = findChildren<MediaGridWidget*>();
+    for (MediaGridWidget* grid : grids) {
+        grid->clearRemoteFocus();
+    }
+    QWidget* focused = QApplication::focusWidget();
+    if (focused && (focused == this || isAncestorOf(focused))) {
+        focused->clearFocus();
+    }
 }
 
 void BaseView::launchTask(QCoro::Task<void>&& task)

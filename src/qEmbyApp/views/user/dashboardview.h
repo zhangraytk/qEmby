@@ -4,6 +4,7 @@
 #include "../baseview.h"
 #include <QStringList>
 #include <qcorotask.h>
+#include "../../utils/wheelinput.h"
 
 class QListView;
 class MediaListModel;
@@ -16,6 +17,7 @@ class HorizontalListViewGallery;
 class MediaSectionWidget;
 class SmoothScrollController;
 class QKeySequence;
+class QModelIndex;
 
 class DashboardView : public BaseView
 {
@@ -27,6 +29,7 @@ public:
     QCoro::Task<void> loadDashboardData();
     bool triggerFeedShortcut(const QKeySequence& sequence);
     bool handleRemoteNavigationKey(int key);
+    void setRemoteFocusActive(bool active) override;
 
 public Q_SLOTS:
     void scrollToTop() override;
@@ -72,6 +75,8 @@ private:
     HorizontalListViewGallery* activeFeedGallery() const;
     HorizontalListViewGallery* galleryForObject(QObject* obj) const;
     void clearFeedKeyboardFocuses();
+    void ensureRemoteFocusVisible(HorizontalListViewGallery* gallery);
+    void ensureLibraryRemoteFocusVisible(const QModelIndex& index);
 
     
     QWidget* createSectionHeader(const QString& title, const QString& type);
@@ -92,6 +97,7 @@ private:
     QScrollArea* m_mainScrollArea = nullptr; 
 
     SmoothScrollController* m_vScrollController = nullptr;
+    WheelInput::AxisLock m_wheelAxisLock;
 
     
     QWidget* m_resumeSection = nullptr;
@@ -119,6 +125,7 @@ private:
     QLabel* m_libraryTitle = nullptr;
     QListView* m_libraryListView = nullptr;
     MediaListModel* m_libraryModel = nullptr;
+    bool m_libraryRemoteFocusActive = false;
 
     
     QList<MediaSectionWidget*> m_libraryGalleries;

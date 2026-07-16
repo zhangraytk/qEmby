@@ -17,6 +17,8 @@
 #include "../../utils/numberextractor.h"
 #include "../../utils/playerpreferenceutils.h"
 #include "../../utils/smoothscrollcontroller.h"
+#include "../../utils/inputnavigation.h"
+#include "../../utils/wheelinput.h"
 #include "overviewdialog.h"
 #include <config/config_keys.h>
 #include <config/configstore.h>
@@ -53,9 +55,11 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <qcorofuture.h>
+#include <algorithm>
 
 #include <optional>
 
@@ -2501,13 +2505,156 @@ bool DetailView::eventFilter(QObject *obj, QEvent *event) {
         (m_mainScrollArea && obj == m_mainScrollArea->viewport());
     if (isHorizontalViewport || isMainViewport) {
       QWheelEvent *we = static_cast<QWheelEvent *>(event);
-      if (m_vScrollController) {
-        m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+      const WheelInput::Axis axis = m_wheelAxisLock.axisFor(we);
+      if (isHorizontalViewport && axis == WheelInput::Axis::Horizontal) {
+        we->ignore();
+        return false;
       }
-      return true;
+      if (axis == WheelInput::Axis::Vertical && m_vScrollController) {
+        const bool handled =
+            m_vScrollController->scrollByWheelEvent(we, Qt::Vertical);
+        if (handled) {
+          we->accept();
+        } else {
+          we->ignore();
+        }
+        return handled;
+      }
+      we->ignore();
+      return false;
+    }
+  }
+  if (event->type() == QEvent::NativeGesture) {
+    auto *gesture = static_cast<QNativeGestureEvent *>(event);
+    const bool isHorizontalViewport =
+        obj->parent() && obj->parent()->property("isHorizontalListView").toBool();
+    const bool isMainViewport =
+        m_mainScrollArea && obj == m_mainScrollArea->viewport();
+    if ((isHorizontalViewport || isMainViewport) &&
+        gesture->gestureType() == Qt::PanNativeGesture &&
+        qAbs(gesture->delta().y()) >= qAbs(gesture->delta().x()) &&
+        m_vScrollController) {
+      return m_vScrollController->scrollByNativeGesture(gesture, Qt::Vertical);
     }
   }
   return QWidget::eventFilter(obj, event);
+}
+
+bool DetailView::handleRemoteNavigation(NavigationCommand command)
+{
+  QList<HorizontalListViewGallery *> galleries;
+  const auto allGalleries = findChildren<HorizontalListViewGallery *>();
+  for (HorizontalListViewGallery *gallery : allGalleries) {
+    if (gallery->isVisibleTo(this) && gallery->itemCount() > 0) {
+      galleries.append(gallery);
+    }
+  }
+  std::stable_sort(galleries.begin(), galleries.end(),
+                   [](HorizontalListViewGallery *first,
+                      HorizontalListViewGallery *second) {
+    const QPoint a = first->mapToGlobal(first->rect().center());
+    const QPoint b = second->mapToGlobal(second->rect().center());
+    return a.y() == b.y() ? a.x() < b.x() : a.y() < b.y();
+  });
+
+  HorizontalListViewGallery *activeGallery = nullptr;
+  for (HorizontalListViewGallery *gallery : galleries) {
+    if (gallery->hasFocusedItem()) {
+      activeGallery = gallery;
+      break;
+    }
+  }
+
+  if (command == NavigationCommand::Activate) {
+    if (activeGallery) {
+      return activeGallery->activateFocusedItem();
+    }
+    return InputNavigation::activateFocusedWidget(this);
+  }
+
+  if (activeGallery) {
+    if (command == NavigationCommand::Left) {
+      const bool moved = activeGallery->moveFocus(-1);
+      if (moved) ensureRemoteFocusVisible(activeGallery);
+      return moved;
+    }
+    if (command == NavigationCommand::Right) {
+      const bool moved = activeGallery->moveFocus(1);
+      if (moved) ensureRemoteFocusVisible(activeGallery);
+      return moved;
+    }
+    if (command == NavigationCommand::Up ||
+        command == NavigationCommand::Down) {
+      const int current = galleries.indexOf(activeGallery);
+      const int next = current +
+          (command == NavigationCommand::Up ? -1 : 1);
+      if (next >= 0 && next < galleries.size()) {
+        const int row = qMax(0, activeGallery->focusedRow());
+        const QRect sourceRect = activeGallery->focusedItemGlobalRect(0);
+        activeGallery->clearKeyboardFocus();
+        if (!galleries[next]->focusClosestInDirection(sourceRect, command)) {
+          activeGallery->setFocusedRow(row);
+          return false;
+        }
+        ensureRemoteFocusVisible(galleries[next]);
+        return true;
+      }
+      const int row = qMax(0, activeGallery->focusedRow());
+      activeGallery->clearKeyboardFocus();
+      if (InputNavigation::moveSpatialFocus(this, command)) {
+        return true;
+      }
+      activeGallery->setFocusedRow(row);
+      ensureRemoteFocusVisible(activeGallery);
+      return false;
+    }
+  }
+
+  if (InputNavigation::moveSpatialFocus(this, command)) {
+    return true;
+  }
+  if (!galleries.isEmpty() &&
+      (command == NavigationCommand::Down ||
+       command == NavigationCommand::Left ||
+       command == NavigationCommand::Right)) {
+    const bool moved = galleries.first()->moveFocus(0);
+    if (moved) ensureRemoteFocusVisible(galleries.first());
+    return moved;
+  }
+  return false;
+}
+
+void DetailView::ensureRemoteFocusVisible(
+    HorizontalListViewGallery *gallery) {
+  if (!gallery || !m_mainScrollArea) {
+    return;
+  }
+  QRect target = gallery->focusedItemGlobalRect();
+  if (!target.isValid()) {
+    target = QRect(gallery->mapToGlobal(QPoint(0, 0)), gallery->size());
+  }
+  InputNavigation::ensureGlobalRectVisible(
+      m_mainScrollArea, target, m_vScrollController);
+
+  QPointer<HorizontalListViewGallery> safeGallery(gallery);
+  QTimer::singleShot(0, this, [this, safeGallery]() {
+    if (safeGallery && m_mainScrollArea) {
+      InputNavigation::ensureGlobalRectVisible(
+          m_mainScrollArea, safeGallery->focusedItemGlobalRect(),
+          m_vScrollController);
+    }
+  });
+}
+
+void DetailView::setRemoteFocusActive(bool active)
+{
+  BaseView::setRemoteFocusActive(active);
+  if (!active) {
+    const auto galleries = findChildren<HorizontalListViewGallery *>();
+    for (HorizontalListViewGallery *gallery : galleries) {
+      gallery->clearKeyboardFocus();
+    }
+  }
 }
 
 void DetailView::showEvent(QShowEvent *event) {

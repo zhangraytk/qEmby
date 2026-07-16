@@ -80,7 +80,11 @@ void SettingsCard::setupUi(const QString &title, const QString &description) {
 
   
   if (m_controlWidget) {
-    if (auto *combo = qobject_cast<QComboBox *>(m_controlWidget)) {
+    if (qobject_cast<ShortcutEdit *>(m_controlWidget)) {
+      m_controlWidget->setMinimumWidth(520);
+      m_controlWidget->setFixedHeight(34);
+      m_controlWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    } else if (auto *combo = qobject_cast<QComboBox *>(m_controlWidget)) {
       combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     } else if (auto *btn = qobject_cast<QPushButton *>(m_controlWidget)) {
       btn->setObjectName("SettingsCardButton");
@@ -148,15 +152,12 @@ void SettingsCard::setupDataBinding() {
   
   
   else if (auto *shortcutEdit = qobject_cast<ShortcutEdit *>(m_controlWidget)) {
-    shortcutEdit->setText(store->get<QString>(m_configKey,
-                                              m_defaultValue.toString()));
+    shortcutEdit->setDefaultValue(m_defaultValue.toString());
+    shortcutEdit->setValue(store->get<QString>(m_configKey,
+                                               m_defaultValue.toString()));
 
     connect(shortcutEdit, &ShortcutEdit::shortcutTextChanged, this,
             [this, store](const QString &val) { store->set(m_configKey, val); });
-    connect(shortcutEdit, &QLineEdit::editingFinished, this,
-            [this, store, shortcutEdit]() {
-              store->set(m_configKey, shortcutEdit->text().trimmed());
-            });
   }
 
   else if (auto *lineEdit = qobject_cast<QLineEdit *>(m_controlWidget)) {
@@ -210,6 +211,9 @@ void SettingsCard::onConfigValueChanged(const QString &key,
     if (idx >= 0) {
       comboControl->setCurrentIndex(idx);
     }
+  } else if (auto *shortcutEdit =
+                 qobject_cast<ShortcutEdit *>(m_controlWidget)) {
+    shortcutEdit->setValue(newValue.toString());
   } else if (auto *lineEdit = qobject_cast<QLineEdit *>(m_controlWidget)) {
     lineEdit->setText(newValue.toString());
   } else if (auto *spinBox = qobject_cast<QSpinBox *>(m_controlWidget)) {

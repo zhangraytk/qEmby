@@ -10,6 +10,7 @@
 #include <qcorotask.h>
 #include "../components/cardcontextmenurequest.h"
 #include <models/media/mediaitem.h> 
+#include "../utils/inputnavigation.h"
 
 class QEmbyCore;
 
@@ -25,6 +26,8 @@ public:
 
     
     virtual void prepareForStackLeave() {}
+    virtual bool handleRemoteNavigation(NavigationCommand command);
+    virtual void setRemoteFocusActive(bool active);
 
 public Q_SLOTS:
     virtual void scrollToTop() {}

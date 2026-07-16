@@ -11,6 +11,8 @@
 #include <QPainterPath>
 #include <QPixmapCache>
 #include <QStyle>
+#include <QVariantAnimation>
+#include <QEasingCurve>
 
 namespace
 {
@@ -201,6 +203,32 @@ MediaCardThemeHelper::MediaCardThemeHelper(QWidget *parent)
 MediaCardDelegate::MediaCardDelegate(CardStyle style, QObject *parent)
     : QStyledItemDelegate(parent), m_style(style), m_tileSize(160, 270), m_themeHelper(nullptr)
 {
+    m_focusAnimation = new QVariantAnimation(this);
+    m_focusAnimation->setStartValue(0.0);
+    m_focusAnimation->setEndValue(1.0);
+    m_focusAnimation->setDuration(150);
+    m_focusAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    connect(m_focusAnimation, &QVariantAnimation::valueChanged, this,
+            [this](const QVariant &value) {
+                m_focusProgress = value.toReal();
+                if (m_focusViewport) {
+                    m_focusViewport->update();
+                }
+            });
+}
+
+void MediaCardDelegate::animateRemoteFocus(const QModelIndex &index,
+                                           QWidget *viewport)
+{
+    if (!index.isValid() || !viewport || !m_focusAnimation) {
+        return;
+    }
+
+    m_focusAnimation->stop();
+    m_animatedFocusIndex = QPersistentModelIndex(index);
+    m_focusViewport = viewport;
+    m_focusProgress = 0.0;
+    m_focusAnimation->start();
 }
 
 QSize MediaCardDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
@@ -373,11 +401,43 @@ void MediaCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     MediaItem item = index.data(MediaListModel::ItemDataRole).value<MediaItem>();
     QPixmap poster = index.data(MediaListModel::PosterPixmapRole).value<QPixmap>();
     bool isHovered = option.state & QStyle::State_MouseOver;
+    const bool isSelected = option.state & QStyle::State_Selected;
+    const qreal focusProgress =
+        isSelected && index == m_animatedFocusIndex
+            ? qBound<qreal>(0.0, m_focusProgress, 1.0)
+            : 1.0;
     const HoverOverlayMode overlayMode = hoverOverlayModeForItem(item, m_style, m_showMoreButtonForNonPlayableTiles);
     const bool showPlayButton = shouldShowPlayButton(overlayMode, m_hoverControls);
     const bool showFavoriteButton = shouldShowFavoriteButton(overlayMode, m_hoverControls);
     const bool showMoreButton = shouldShowMoreButton(overlayMode, m_hoverControls);
     const bool hasHoverButtons = showPlayButton || showFavoriteButton || showMoreButton;
+
+    if (isSelected)
+    {
+        QColor animatedSelection = selectedBg;
+        animatedSelection.setAlphaF(
+            animatedSelection.alphaF() * (0.42 + 0.58 * focusProgress));
+        const int inset = qRound(3.0 * (1.0 - focusProgress));
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(animatedSelection);
+        painter->drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset),
+                                 8, 8);
+    }
+
+    auto drawRemoteFocusRing = [&]() {
+        if (!isSelected) {
+            return;
+        }
+        QColor ring = isDarkTheme ? QColor(96, 165, 250)
+                                  : QColor(37, 99, 235);
+        ring.setAlphaF(0.55 + 0.45 * focusProgress);
+        QPen pen(ring, 2.0);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        const int inset = 2 + qRound(2.0 * (1.0 - focusProgress));
+        painter->drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset),
+                                 8, 8);
+    };
 
     
     
@@ -518,6 +578,7 @@ void MediaCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
             }
         }
 
+        drawRemoteFocusRing();
         painter->restore();
         return;
     }
@@ -527,13 +588,6 @@ void MediaCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     
 
     
-    if (option.state & QStyle::State_Selected)
-    {
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(selectedBg);
-        painter->drawRoundedRect(rect, 8, 8);
-    }
-
     const int padding = m_contentPadding;
     QRect baseImgRect, titleRect, yearRect;
 
@@ -568,6 +622,11 @@ void MediaCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
 
     
     QRect targetImgRect = baseImgRect;
+    if (isSelected)
+    {
+        const int inset = qRound(2.0 * (1.0 - focusProgress));
+        targetImgRect.adjust(inset, inset, -inset, -inset);
+    }
 
     if (isHovered)
     {
@@ -810,5 +869,6 @@ void MediaCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
         painter->drawText(yearRect, Qt::AlignHCenter | Qt::AlignVCenter, elidedRole);
     }
 
+    drawRemoteFocusRing();
     painter->restore();
 }

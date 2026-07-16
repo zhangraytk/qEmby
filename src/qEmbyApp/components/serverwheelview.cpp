@@ -4,6 +4,7 @@
 #include <QGraphicsOpacityEffect>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include "../utils/wheelinput.h"
 #include <QDateTime>
 #include <QMap>
 #include <QtMath>
@@ -163,18 +164,33 @@ bool ServerWheelView::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void ServerWheelView::wheelEvent(QWheelEvent* event) {
-    if (m_items.isEmpty()) return;
+    if (m_items.isEmpty()) {
+        event->ignore();
+        return;
+    }
 
-    
-    
-    qreal angleDelta = event->angleDelta().y();
-    qreal step = -angleDelta / 120.0; 
+    const int value = WheelInput::delta(event, Qt::Vertical);
+    if (value == 0) {
+        event->ignore();
+        return;
+    }
+
+    const qreal divisor = WheelInput::isPrecise(event) ? 80.0 : 120.0;
+    const qreal increment = -value / divisor;
+    if (!qFuzzyIsNull(m_wheelRemainder) &&
+        ((m_wheelRemainder > 0) != (increment > 0))) {
+        m_wheelRemainder = 0.0;
+    }
+    m_wheelRemainder += increment;
+    const qreal step = m_wheelRemainder;
+    m_wheelRemainder = 0.0;
 
     
     qreal baseTarget = m_scrollAnim->state() == QAbstractAnimation::Running ?
                            m_scrollAnim->endValue().toReal() : qRound(m_scrollOffset);
 
     scrollTo(baseTarget + step);
+    event->accept();
 }
 
 void ServerWheelView::installFilterRecursively(QWidget* w) {

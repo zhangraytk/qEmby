@@ -5,10 +5,13 @@
 #include <QWidget>
 #include <QColor>
 #include <QFlags>
+#include <QPersistentModelIndex>
+#include <QPointer>
 #include <QSet>
 
 
 struct MediaItem;
+class QVariantAnimation;
 
 
 class MediaCardThemeHelper : public QWidget {
@@ -97,6 +100,7 @@ public:
         m_hoverControls = controls;
     }
     HoverControls hoverControls() const { return m_hoverControls; }
+    void animateRemoteFocus(const QModelIndex &index, QWidget *viewport);
 
 signals:
     
@@ -119,6 +123,10 @@ private:
     int m_titleFontPixelSize = 13;
     int m_subTitleFontPixelSize = 12;
     int m_contentPadding = 8;
+    QVariantAnimation *m_focusAnimation = nullptr;
+    QPersistentModelIndex m_animatedFocusIndex;
+    QPointer<QWidget> m_focusViewport;
+    qreal m_focusProgress = 1.0;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(MediaCardDelegate::HoverControls)

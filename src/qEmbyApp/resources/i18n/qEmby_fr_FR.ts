@@ -2537,6 +2537,42 @@ Cette action ne peut pas être annulée.</translation>
 </context>
 
 <context>
+    <name>ShortcutEdit</name>
+    <message>
+        <source>Type shortcuts separated by semicolons</source>
+        <translation>Saisissez les raccourcis séparés par des points-virgules</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation>Capturer</translation>
+    </message>
+    <message>
+        <source>Capture the next key combination</source>
+        <translation>Capturer la prochaine combinaison de touches</translation>
+    </message>
+    <message>
+        <source>Restore Default</source>
+        <translation>Valeur par défaut</translation>
+    </message>
+    <message>
+        <source>Restore the default shortcut</source>
+        <translation>Restaurer le raccourci par défaut</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Press a shortcut now</source>
+        <translation>Appuyez maintenant sur un raccourci</translation>
+    </message>
+    <message>
+        <source>Invalid shortcut. Separate alternatives with semicolons.</source>
+        <translation>Raccourci invalide. Séparez les variantes par des points-virgules.</translation>
+    </message>
+</context>
+
+<context>
     <name>PageControls</name>
     <message>
         <source>Controls</source>
@@ -2547,8 +2583,16 @@ Cette action ne peut pas être annulée.</translation>
         <translation>Raccourci Retour</translation>
     </message>
     <message>
-        <source>Click and press a shortcut; paste semicolon-separated alternatives if needed</source>
-        <translation>Cliquez puis appuyez sur un raccourci ; collez plusieurs variantes séparées par des points-virgules si nécessaire</translation>
+        <source>Forward Shortcut</source>
+        <translation>Raccourci Suivant</translation>
+    </message>
+    <message>
+        <source>Shortcut for moving forward through browsing history</source>
+        <translation>Raccourci pour avancer dans l'historique de navigation</translation>
+    </message>
+    <message>
+        <source>Capture a shortcut or type semicolon-separated alternatives</source>
+        <translation>Capturez un raccourci ou saisissez des variantes séparées par des points-virgules</translation>
     </message>
     <message>
         <source>Home Shortcut</source>
@@ -2587,8 +2631,8 @@ Cette action ne peut pas être annulée.</translation>
         <translation>Navigation au focus avec télécommande</translation>
     </message>
     <message>
-        <source>Arrow keys move focus across home feeds; Enter, Space, or Select opens the focused card</source>
-        <translation>Les flèches déplacent le focus dans les flux d'accueil ; Entrée, Espace ou Select ouvre la carte ciblée</translation>
+        <source>Direction and Select keys automatically show focus across browsing views; pointer input hides it</source>
+        <translation>Les touches directionnelles et Select affichent automatiquement le focus dans les vues de navigation ; le pointeur le masque</translation>
     </message>
 </context>
 

@@ -4,6 +4,7 @@
 #include "../baseview.h"
 #include <QList>
 #include <qcorotask.h>
+#include "../../utils/wheelinput.h"
 
 class QListView;
 class QLabel;
@@ -20,6 +21,7 @@ public:
     
     QCoro::Task<void> loadFavoritesData();
     bool handleRemoteNavigationKey(int key);
+    void setRemoteFocusActive(bool active) override;
 
 protected:
     
@@ -39,10 +41,12 @@ private:
     HorizontalListViewGallery* activeFeedGallery() const;
     HorizontalListViewGallery* galleryForObject(QObject* obj) const;
     void clearFeedKeyboardFocuses();
+    void ensureRemoteFocusVisible(HorizontalListViewGallery* gallery);
 
     QScrollArea* m_mainScrollArea;
 
     SmoothScrollController* m_vScrollController;
+    WheelInput::AxisLock m_wheelAxisLock;
 
     
     QWidget* m_moviesHeader;

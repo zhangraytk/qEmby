@@ -3660,6 +3660,17 @@ QLabel#SubtitleOptionSliderHint {
     color: #334155;
 }
 
+#SettingsCardButton[capturing="true"] {
+    background-color: #DBEAFE;
+    border-color: #3B82F6;
+    color: #1D4ED8;
+}
+
+QLineEdit#ShortcutEditLine[inputValid="false"] {
+    border: 2px solid #DC2626;
+    padding: 7px 11px;
+}
+
 #SettingsCardButton[navActive="true"] {
     background-color: rgba(59, 130, 246, 0.10);
     border-color: rgba(59, 130, 246, 0.25);
@@ -6343,4 +6354,13 @@ QTableView#webdav-snapshot-table QHeaderView::section:last {
 QTableView#webdav-snapshot-table QTableCornerButton::section {
     background-color: #F8FAFC;
     border: none;
+}
+QMainWindow[remoteFocusMode="true"] QPushButton:focus,
+QMainWindow[remoteFocusMode="true"] QToolButton:focus,
+QMainWindow[remoteFocusMode="true"] QComboBox:focus,
+QMainWindow[remoteFocusMode="true"] QListWidget:focus,
+QMainWindow[remoteFocusMode="true"] QListView:focus {
+    border: 2px solid #2563EB;
+    border-radius: 7px;
+    outline: none;
 }

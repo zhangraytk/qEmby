@@ -1,6 +1,8 @@
 #include "settingsview.h"
 #include "../../components/slidingstackedwidget.h"
 #include "../../managers/thememanager.h" 
+#include "../../utils/inputnavigation.h"
+#include "../../utils/smoothscrollcontroller.h"
 #include "pageabout.h"
 #include "pageappearance.h"
 #include "pagecontrols.h"
@@ -14,6 +16,7 @@
 #include <QScrollBar>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QNativeGestureEvent>
 
 
 SettingsView::SettingsView(QEmbyCore *core, QWidget *parent)
@@ -52,7 +55,7 @@ void SettingsView::setupUi() {
   
   m_navMenu = new QListWidget(m_leftPanel);
   m_navMenu->setObjectName("SettingsNavMenu");
-  m_navMenu->setFocusPolicy(Qt::NoFocus);
+  m_navMenu->setFocusPolicy(Qt::StrongFocus);
   
   m_navMenu->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   m_navMenu->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -112,8 +115,7 @@ void SettingsView::setupUi() {
   
   const int kPageCount = 6;
   m_scrollAreas.reserve(kPageCount);
-  m_scrollAnims.reserve(kPageCount);
-  m_scrollTargets.reserve(kPageCount);
+  m_scrollControllers.reserve(kPageCount);
   m_pages.reserve(kPageCount);
   for (int i = 0; i < kPageCount; ++i) {
     auto *placeholder = new QWidget(m_stack);
@@ -122,8 +124,7 @@ void SettingsView::setupUi() {
     m_stack->addWidget(placeholder);
 
     m_scrollAreas.append(nullptr);
-    m_scrollAnims.append(nullptr);
-    m_scrollTargets.append(0);
+    m_scrollControllers.append(nullptr);
     m_pages.append(QPointer<QWidget>());
   }
 
@@ -154,12 +155,10 @@ QScrollArea *SettingsView::wrapInScrollArea(QWidget *page, int row) {
   if (row >= 0 && row < m_scrollAreas.size()) {
     m_scrollAreas[row] = scroll;
 
-    auto *anim =
-        new QPropertyAnimation(scroll->verticalScrollBar(), "value", this);
-    anim->setEasingCurve(QEasingCurve::OutCubic);
-    anim->setDuration(450);
-    m_scrollAnims[row] = anim;
-    m_scrollTargets[row] = 0;
+    auto *controller =
+        new SmoothScrollController(scroll->verticalScrollBar(), this);
+    controller->setDuration(160);
+    m_scrollControllers[row] = controller;
   }
 
   return scroll;
@@ -241,6 +240,57 @@ void SettingsView::onThemeChanged() {
   }
 }
 
+bool SettingsView::handleRemoteNavigation(NavigationCommand command)
+{
+  QWidget *focused = QApplication::focusWidget();
+  const bool focusInMenu = focused &&
+      (focused == m_navMenu || m_navMenu->isAncestorOf(focused));
+  if (!focusInMenu) {
+    return BaseView::handleRemoteNavigation(command);
+  }
+
+  if (command == NavigationCommand::Up ||
+      command == NavigationCommand::Down) {
+    const int delta = command == NavigationCommand::Up ? -1 : 1;
+    return InputNavigation::moveCurrentItem(m_navMenu, delta);
+  }
+  if (command == NavigationCommand::Activate) {
+    const int row = m_navMenu->currentRow();
+    if (row >= 0) {
+      ensurePageAt(row);
+      m_stack->setCurrentIndex(row);
+      InputNavigation::animateItemFocus(
+          m_navMenu, m_navMenu->currentIndex());
+    }
+    return true;
+  }
+  if (command == NavigationCommand::Right) {
+    QWidget *page = m_stack->currentWidget();
+    if (page) {
+      InputNavigation::moveSpatialFocus(page, command);
+    }
+    return true;
+  }
+  if (command == NavigationCommand::Left) {
+    return false;
+  }
+  return BaseView::handleRemoteNavigation(command);
+}
+
+void SettingsView::setRemoteFocusActive(bool active)
+{
+  BaseView::setRemoteFocusActive(active);
+  if (!active) {
+    InputNavigation::clearFocusAnimations(this);
+    return;
+  }
+
+  QWidget *focused = QApplication::focusWidget();
+  if (!focused || (focused != this && !isAncestorOf(focused))) {
+    InputNavigation::focusCurrentItem(m_navMenu);
+  }
+}
+
 bool SettingsView::eventFilter(QObject *obj, QEvent *event) {
   if (event->type() == QEvent::Wheel) {
     
@@ -250,34 +300,35 @@ bool SettingsView::eventFilter(QObject *obj, QEvent *event) {
         continue;
       }
       if (obj == m_scrollAreas[i]->viewport()) {
-        auto *we   = static_cast<QWheelEvent *>(event);
-        auto *vBar = m_scrollAreas[i]->verticalScrollBar();
-        auto *anim = m_scrollAnims[i];
-
-        if (vBar && anim) {
-          int currentVal = vBar->value();
-
-          
-          if (anim->state() == QAbstractAnimation::Running) {
-            currentVal = m_scrollTargets[i];
+        auto *we = static_cast<QWheelEvent *>(event);
+        auto *controller = i < m_scrollControllers.size()
+                               ? m_scrollControllers[i]
+                               : nullptr;
+        if (controller) {
+          const bool handled =
+              controller->scrollByWheelEvent(we, Qt::Vertical);
+          if (handled) {
+            we->accept();
+          } else {
+            we->ignore();
           }
-
-          
-          int step      = we->angleDelta().y();
-          int newTarget = currentVal - step;
-
-          
-          newTarget = qBound(vBar->minimum(), newTarget, vBar->maximum());
-
-          if (newTarget != vBar->value()) {
-            m_scrollTargets[i] = newTarget;
-            anim->stop();
-            anim->setStartValue(vBar->value());
-            anim->setEndValue(newTarget);
-            anim->start();
-          }
+          return handled;
         }
-        return true; 
+        we->ignore();
+        return false;
+      }
+    }
+  }
+
+  if (event->type() == QEvent::NativeGesture) {
+    auto *gesture = static_cast<QNativeGestureEvent *>(event);
+    if (gesture->gestureType() == Qt::PanNativeGesture) {
+      for (int i = 0; i < m_scrollAreas.size(); ++i) {
+        if (m_scrollAreas[i] && obj == m_scrollAreas[i]->viewport() &&
+            i < m_scrollControllers.size() && m_scrollControllers[i]) {
+          return m_scrollControllers[i]->scrollByNativeGesture(
+              gesture, Qt::Vertical);
+        }
       }
     }
   }

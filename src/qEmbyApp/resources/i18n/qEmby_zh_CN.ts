@@ -2829,6 +2829,42 @@ This action cannot be undone.</source>
 </context>
 
 <context>
+    <name>ShortcutEdit</name>
+    <message>
+        <source>Type shortcuts separated by semicolons</source>
+        <translation>手动输入快捷键，多个备选项用分号分隔</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation>捕获</translation>
+    </message>
+    <message>
+        <source>Capture the next key combination</source>
+        <translation>捕获下一组按键组合</translation>
+    </message>
+    <message>
+        <source>Restore Default</source>
+        <translation>恢复默认</translation>
+    </message>
+    <message>
+        <source>Restore the default shortcut</source>
+        <translation>恢复默认快捷键</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Press a shortcut now</source>
+        <translation>现在按下快捷键</translation>
+    </message>
+    <message>
+        <source>Invalid shortcut. Separate alternatives with semicolons.</source>
+        <translation>快捷键格式无效；多个备选项请用分号分隔。</translation>
+    </message>
+</context>
+
+<context>
     <name>PageControls</name>
     <message>
         <source>Controls</source>
@@ -2839,8 +2875,16 @@ This action cannot be undone.</source>
         <translation>返回快捷键</translation>
     </message>
     <message>
-        <source>Click and press a shortcut; paste semicolon-separated alternatives if needed</source>
-        <translation>点击后按下快捷键；如需多个备选快捷键，可粘贴用分号分隔的列表</translation>
+        <source>Forward Shortcut</source>
+        <translation>前进快捷键</translation>
+    </message>
+    <message>
+        <source>Shortcut for moving forward through browsing history</source>
+        <translation>在浏览历史中向前导航的快捷键</translation>
+    </message>
+    <message>
+        <source>Capture a shortcut or type semicolon-separated alternatives</source>
+        <translation>捕获快捷键，或手动输入用分号分隔的备选组合</translation>
     </message>
     <message>
         <source>Home Shortcut</source>
@@ -2879,8 +2923,8 @@ This action cannot be undone.</source>
         <translation>遥控器焦点导航</translation>
     </message>
     <message>
-        <source>Arrow keys move focus across home feeds; Enter, Space, or Select opens the focused card</source>
-        <translation>方向键可在主页信息流之间移动焦点；Enter、空格或 Select 打开当前焦点卡片</translation>
+        <source>Direction and Select keys automatically show focus across browsing views; pointer input hides it</source>
+        <translation>方向键和 Select 键会在浏览页面中自动显示焦点；鼠标或触控板操作会隐藏焦点</translation>
     </message>
 </context>
 

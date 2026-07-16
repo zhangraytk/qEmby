@@ -8,7 +8,9 @@
 #include <QPointer>
 #include <qcorotask.h>
 #include <optional>
+#include <QVariantMap>
 #include <models/media/mediaitem.h>
+#include "../../utils/inputnavigation.h"
 
 class QTimer;
 class QEmbyCore;
@@ -37,11 +39,12 @@ class WebdavProfileStore;
 
 struct RouteInfo {
     QPointer<QWidget> widget; 
-    bool isDynamic;           
+    bool isDynamic = false;
     QString routeType;        
     QString routeId;          
     QString routeTitle;       
     QString routeExtraId;     
+    QVariantMap payload;
 };
 
 class HomeView : public QWidget
@@ -59,6 +62,7 @@ public:
 
     
     bool canNavigateBack() const;
+    bool canNavigateForward() const;
 
     bool canGoHome() const;
 
@@ -67,11 +71,13 @@ public:
     
     PlayerView* activePlayerView() const;
     bool triggerDashboardFeedShortcut(const QKeySequence& sequence);
-    bool handleRemoteNavigationKey(int key);
+    bool handleRemoteNavigation(NavigationCommand command);
+    void setRemoteFocusActive(bool active);
 
 public Q_SLOTS:
     
     void navigateBack();
+    void navigateForward();
     void goHome();
     void goFav();
 
@@ -84,6 +90,7 @@ protected:
 signals:
     void logoutRequested();
     void canNavigateBackChanged(bool canBack);
+    void canNavigateForwardChanged(bool canForward);
     void homeContentSwitched();
     
     
@@ -91,6 +98,11 @@ signals:
     void playerChromeVisibilityChanged(bool visible);
 
 private:
+    enum class RouteWidgetRetention {
+        KeepWidget,
+        MetadataOnly,
+    };
+
     void scheduleProfileRefresh();
     void setupUi();
     void setupSidebar();
@@ -102,6 +114,7 @@ private:
     bool isCurrentViewImmersive() const;
     int sidebarWidthForMode(bool pinned) const;
     void applySidebarMetrics(bool pinned);
+    void positionFloatingSidebar(bool shown);
     void applySidebarIcons();
     void applySidebarCustomVisibility();
     void syncSidebarVisibility();
@@ -113,6 +126,13 @@ private:
     
     void pushView(QWidget* view);
     void resetToView(QWidget* view);
+    RouteInfo routeInfoForWidget(
+        QWidget* widget,
+        RouteWidgetRetention retention = RouteWidgetRetention::KeepWidget) const;
+    QWidget* restoreRoute(const RouteInfo& info);
+    void emitNavigationState();
+    void clearSidebarRemoteFocusVisual();
+    void clearContentRemoteFocusVisual();
 
     QWidget* createDetailView(const QString& itemId, const QString& itemName = "", const MediaItem& seedItem = {});
     QWidget* createCategoryView(const QString& categoryId, const QString& title = "");
@@ -135,6 +155,7 @@ private:
     SlidingStackedWidget* m_contentSwitcher = nullptr;
     bool m_isDestroying = false;
     QStack<RouteInfo> m_navStack; 
+    QStack<RouteInfo> m_forwardStack;
 
     DashboardView* m_dashboardView = nullptr;
     FavoritesView* m_favoritesView = nullptr;
@@ -146,6 +167,7 @@ private:
     bool m_sidebarOnRight = false;
     bool m_sidebarPinned = false;
     bool m_sidebarPinnedApplied = false;
+    bool m_floatingSidebarShown = false;
     bool m_sidebarResizeDragging = false;
     int m_sidebarResizeStartGlobalX = 0;
     int m_sidebarResizeStartWidth = 0;
