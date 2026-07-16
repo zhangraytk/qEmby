@@ -15,6 +15,8 @@ class QEMBYCORE_EXPORT ServerManager : public QObject {
     Q_OBJECT
 public:
     explicit ServerManager(NetworkManager* nm, QObject* parent = nullptr);
+    ServerManager(NetworkManager* nm, const QString& settingsFilePath,
+                  QObject* parent = nullptr);
 
     
     void addServer(const ServerProfile& profile);
@@ -40,7 +42,7 @@ public:
 
     
     void loadSettings();
-    void saveSettings();
+    bool saveSettings(QString* errorString = nullptr);
 
     void clearActiveSession();
 Q_SIGNALS:
@@ -50,12 +52,15 @@ Q_SIGNALS:
     
     void serverProxyChanged(const QString& serverId);
 
+    void settingsSaveFailed(const QString& errorMessage);
+
 private:
     NetworkManager* m_network;
     QList<ServerProfile> m_servers;
     ServerProfile m_activeProfile;
     QSharedPointer<ApiClient> m_activeClient; 
     EmbyWebSocket* m_activeWebSocket = nullptr; 
+    QString m_settingsFilePath;
 };
 
 #endif

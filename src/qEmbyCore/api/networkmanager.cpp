@@ -1,4 +1,5 @@
 #include "networkmanager.h"
+#include "../utils/logredactionutils.h"
 #include <QJsonArray>
 #include <QJsonParseError>
 #include <QJsonValue>
@@ -111,7 +112,7 @@ void NetworkManager::applyRequestOptions(QNetworkRequest& request,
         request.url().scheme().compare(QStringLiteral("https"),
                                        Qt::CaseInsensitive) == 0) {
         qWarning() << "[NetworkManager] SSL certificate verification is DISABLED"
-                   << "| url:" << request.url().toString();
+                   << "| url:" << LogRedactionUtils::url(request.url());
     }
 }
 
@@ -136,7 +137,7 @@ void NetworkManager::attachReplyHandlers(QNetworkReply* reply,
 
                 qWarning() << "[NetworkManager]" << requestKind
                            << "TLS validation errors"
-                           << "| url:" << reply->url().toString()
+                           << "| url:" << LogRedactionUtils::url(reply->url())
                            << "| ignoreSslErrors:" << options.ignoreSslErrors
                            << "| errors:" << summary;
 
@@ -144,7 +145,7 @@ void NetworkManager::attachReplyHandlers(QNetworkReply* reply,
                     qWarning() << "[NetworkManager]" << requestKind
                                << "Ignoring TLS validation errors for trusted "
                                   "server"
-                               << "| url:" << reply->url().toString();
+                               << "| url:" << LogRedactionUtils::url(reply->url());
                     reply->ignoreSslErrors();
                     reply->setProperty("sslErrorsIgnored", true);
                 }
@@ -180,7 +181,7 @@ QJsonObject NetworkManager::parseReply(QNetworkReply* reply) {
         int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         QByteArray responseBody = reply->readAll();
         qWarning() << "[NetworkManager] Request FAILED"
-                   << "| url:" << reply->url().toString()
+                   << "| url:" << LogRedactionUtils::url(reply->url())
                    << "| httpStatus:" << httpStatus
                    << "| qtError:" << reply->error()
                    << "| errorString:" << reply->errorString()
@@ -257,7 +258,7 @@ QJsonObject NetworkManager::parseReply(QNetworkReply* reply) {
 
     if (!hasValidJson) {
         qWarning() << "[NetworkManager] JSON parse failed"
-                   << "| url:" << reply->url().toString()
+                   << "| url:" << LogRedactionUtils::url(reply->url())
                    << "| contentType:" << contentType
                    << "| charset:" << charsetName
                    << "| parseError:" << parseError.errorString()
@@ -269,7 +270,7 @@ QJsonObject NetworkManager::parseReply(QNetworkReply* reply) {
     if (!charsetName.isEmpty() || parseSource != QStringLiteral("raw-utf8") ||
         replacementCount > 0) {
         qDebug() << "[NetworkManager] JSON decoded"
-                 << "| url:" << reply->url().toString()
+                 << "| url:" << LogRedactionUtils::url(reply->url())
                  << "| contentType:" << contentType
                  << "| charset:" << charsetName
                  << "| source:" << parseSource
@@ -327,7 +328,7 @@ QString NetworkManager::parseReplyAsText(QNetworkReply* reply) {
     if (reply->error() != QNetworkReply::NoError) {
         int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         qWarning() << "[NetworkManager] getText FAILED"
-                   << "| url:" << reply->url().toString()
+                   << "| url:" << LogRedactionUtils::url(reply->url())
                    << "| httpStatus:" << httpStatus
                    << "| errorString:" << reply->errorString()
                    << "| ignoreSslErrors:"
@@ -378,7 +379,7 @@ QByteArray NetworkManager::parseReplyAsBytes(QNetworkReply* reply,
     if (reply->error() != QNetworkReply::NoError) {
         int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         qWarning() << "[NetworkManager]" << requestKind << "FAILED"
-                   << "| url:" << reply->url().toString()
+                   << "| url:" << LogRedactionUtils::url(reply->url())
                    << "| httpStatus:" << httpStatus
                    << "| errorString:" << reply->errorString()
                    << "| ignoreSslErrors:"
@@ -487,7 +488,8 @@ QCoro::Task<QJsonObject> NetworkManager::deleteResource(
     
     request.setHeader(QNetworkRequest::ContentTypeHeader, QVariant());
 
-    qDebug() << "[NetworkManager] DELETE encodedUrl:" << request.url().toEncoded();
+    qDebug() << "[NetworkManager] DELETE encodedUrl:"
+             << LogRedactionUtils::url(request.url());
 
     QNetworkReply* reply = m_networkManager->deleteResource(request);
     attachReplyHandlers(reply, options, QStringLiteral("DELETE"));

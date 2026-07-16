@@ -1,6 +1,6 @@
 #include "mpvwidget.h"
 #include "mpvhttpstreamrelay.h"
-#include "../utils/logredactionutils.h"
+#include <utils/logredactionutils.h>
 #include <QOpenGLContext>
 #include <QMetaObject>
 #include <QCoreApplication>
@@ -240,7 +240,7 @@ void MpvWidget::loadMediaNow(const QString &url, const QString &serverId, bool w
             << "| mpvProxyValue:" << LogRedactionUtils::proxy(mpvProxyValue)
             << "| relay:" << usingRelay
             << "| playbackUrl:" << (usingRelay
-                                       ? playbackUrl
+                                       ? LogRedactionUtils::url(playbackUrl)
                                        : QStringLiteral("<direct>"))
             << "| forceSeekable:" << forceSeekable;
 

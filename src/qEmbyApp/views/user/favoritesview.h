@@ -5,6 +5,7 @@
 #include <QList>
 #include <qcorotask.h>
 #include "../../utils/wheelinput.h"
+#include "../../utils/asyncrequestgate.h"
 
 class QListView;
 class QLabel;
@@ -34,6 +35,8 @@ protected:
 
 private:
     void setupUi();
+    QString currentFavoritesContextKey() const;
+    void clearFavoritesState();
 
     
     QWidget* createSectionHeader(const QString& title, const QString& itemType = QString());
@@ -71,6 +74,9 @@ private:
     
     QWidget* m_foldersHeader;
     HorizontalListViewGallery* m_foldersGallery;
+
+    AsyncRequestGate m_loadGate;
+    QString m_favoritesContextKey;
 };
 
 #endif 

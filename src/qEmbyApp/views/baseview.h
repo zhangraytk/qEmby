@@ -101,6 +101,14 @@ protected:
         const QString& itemId,
         std::optional<MediaUserDataInfo> playbackStateOverride = std::nullopt);
 
+    quint64 beginPlaybackRequest();
+    QString currentPlaybackContextKey() const;
+    bool isPlaybackRequestCurrent(quint64 generation,
+                                  const QString& contextKey) const;
+    void reportPlaybackFailure(const QString& operation,
+                               const QString& diagnostic = QString(),
+                               bool noPlayableSource = false) const;
+
     QEmbyCore* m_core;
 
 private:
@@ -123,6 +131,7 @@ private:
     QCoro::Task<void> executeRemoveMedia(MediaItem item);
     QCoro::Task<MediaItem> resolvePlaybackItem(MediaItem item);
     bool isJellyfinServer() const;
+    quint64 m_playbackRequestGeneration = 0;
 };
 
 #endif 

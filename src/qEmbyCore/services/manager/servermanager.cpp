@@ -3,11 +3,19 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFile>
+#include <QFileInfo>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QDir>
 
 ServerManager::ServerManager(NetworkManager* nm, QObject* parent)
-    : QObject(parent), m_network(nm) {
+    : ServerManager(nm, QString(), parent) {
+}
+
+ServerManager::ServerManager(NetworkManager* nm,
+                             const QString& settingsFilePath,
+                             QObject* parent)
+    : QObject(parent), m_network(nm), m_settingsFilePath(settingsFilePath) {
     loadSettings();
 }
 
@@ -159,7 +167,17 @@ EmbyWebSocket* ServerManager::activeWebSocket() const
 
 
 
-void ServerManager::saveSettings() {
+bool ServerManager::saveSettings(QString* errorString) {
+    auto reportFailure = [this, errorString](const QString& message) {
+        if (errorString) {
+            *errorString = message;
+        }
+        qWarning() << "[ServerManager] Failed to save server settings"
+                   << "| error:" << message;
+        Q_EMIT settingsSaveFailed(message);
+        return false;
+    };
+
     
     QJsonArray array;
     for (const auto& p : m_servers) {
@@ -181,17 +199,58 @@ void ServerManager::saveSettings() {
         array.append(obj);
     }
 
-    QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(path);
-    QFile file(path + "/servers.json");
-    if (file.open(QIODevice::WriteOnly)) {
-        file.write(QJsonDocument(array).toJson());
+    QString filePath = m_settingsFilePath;
+    if (filePath.isEmpty()) {
+        const QString appDataPath =
+            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (appDataPath.isEmpty()) {
+            return reportFailure(tr("应用数据目录不可用。"));
+        }
+        filePath = QDir(appDataPath).filePath(QStringLiteral("servers.json"));
     }
+    const QString path = QFileInfo(filePath).absolutePath();
+    if (path.isEmpty()) {
+        return reportFailure(tr("应用数据目录不可用。"));
+    }
+    if (!QDir().mkpath(path)) {
+        return reportFailure(tr("无法创建应用数据目录：%1").arg(path));
+    }
+
+    QSaveFile file(filePath);
+    file.setDirectWriteFallback(false);
+    if (!file.open(QIODevice::WriteOnly)) {
+        return reportFailure(file.errorString());
+    }
+
+    const QByteArray data = QJsonDocument(array).toJson();
+    if (file.write(data) != data.size()) {
+        const QString message = file.errorString().isEmpty()
+            ? tr("服务器配置写入不完整。")
+            : file.errorString();
+        file.cancelWriting();
+        return reportFailure(message);
+    }
+    if (!file.commit()) {
+        return reportFailure(file.errorString());
+    }
+
+    if (errorString) {
+        errorString->clear();
+    }
+    return true;
 }
 
 void ServerManager::loadSettings() {
-    QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QFile file(path + "/servers.json");
+    QString filePath = m_settingsFilePath;
+    if (filePath.isEmpty()) {
+        const QString appDataPath =
+            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (appDataPath.isEmpty()) {
+            return;
+        }
+        filePath = QDir(appDataPath).filePath(QStringLiteral("servers.json"));
+    }
+    QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) return;
 
     QJsonArray array = QJsonDocument::fromJson(file.readAll()).array();
@@ -229,4 +288,3 @@ void ServerManager::clearActiveSession()
     m_activeClient.reset();
     Q_EMIT activeServerChanged(m_activeProfile);
 }
-

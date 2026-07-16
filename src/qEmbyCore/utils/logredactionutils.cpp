@@ -1,5 +1,6 @@
 #include "logredactionutils.h"
 
+#include <QRegularExpression>
 #include <QUrlQuery>
 
 namespace {
@@ -35,7 +36,7 @@ QString redactUrl(QUrl redacted)
     return redacted.toString(QUrl::FullyEncoded | QUrl::RemovePassword);
 }
 
-} 
+}
 
 QString LogRedactionUtils::url(const QUrl &url)
 {
@@ -57,6 +58,51 @@ QString LogRedactionUtils::url(const QString &value)
         return value;
     }
     return redactUrl(parsed);
+}
+
+QString LogRedactionUtils::text(const QString &value)
+{
+    QString redacted = value;
+
+    static const QRegularExpression urlPattern(
+        QStringLiteral(R"((?:[A-Za-z][A-Za-z0-9+.-]*://|file:)[^\s<>"']+)"));
+    QList<QRegularExpressionMatch> urlMatches;
+    auto urlIterator = urlPattern.globalMatch(redacted);
+    while (urlIterator.hasNext()) {
+        urlMatches.append(urlIterator.next());
+    }
+    for (auto it = urlMatches.crbegin(); it != urlMatches.crend(); ++it) {
+        const QRegularExpressionMatch &match = *it;
+        redacted.replace(match.capturedStart(), match.capturedLength(),
+                         url(match.captured()));
+    }
+
+    static const QRegularExpression sensitivePairPattern(
+        QStringLiteral(
+            R"((\b(?:api[_-]?key|[A-Za-z0-9_.-]*token[A-Za-z0-9_.-]*)\b\s*[:=]\s*)([^\s&,;]+))"),
+        QRegularExpression::CaseInsensitiveOption);
+    QList<QRegularExpressionMatch> pairMatches;
+    auto pairIterator = sensitivePairPattern.globalMatch(redacted);
+    while (pairIterator.hasNext()) {
+        pairMatches.append(pairIterator.next());
+    }
+    for (auto it = pairMatches.crbegin(); it != pairMatches.crend(); ++it) {
+        const QRegularExpressionMatch &match = *it;
+        const QString capturedValue = match.captured(2);
+        QString replacementValue = QStringLiteral("***");
+        if (capturedValue.size() >= 2 &&
+            ((capturedValue.startsWith(QLatin1Char('"')) &&
+              capturedValue.endsWith(QLatin1Char('"'))) ||
+             (capturedValue.startsWith(QLatin1Char('\'')) &&
+              capturedValue.endsWith(QLatin1Char('\''))))) {
+            replacementValue = capturedValue.left(1) + QStringLiteral("***") +
+                               capturedValue.right(1);
+        }
+        redacted.replace(match.capturedStart(), match.capturedLength(),
+                         match.captured(1) + replacementValue);
+    }
+
+    return redacted;
 }
 
 QString LogRedactionUtils::proxy(const QString &value)

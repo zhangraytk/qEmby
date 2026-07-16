@@ -1,4 +1,5 @@
 #include "webdavclient.h"
+#include "../../utils/logredactionutils.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -368,7 +369,8 @@ QUrl WebdavClient::absoluteUrlForSegments(const QStringList &segments) const
     if (!base.isValid())
     {
         qWarning() << "[WebdavClient] absoluteUrl: invalid baseUrl"
-                   << "| baseUrl:" << m_profile.baseUrl;
+                   << "| baseUrl:"
+                   << LogRedactionUtils::url(m_profile.baseUrl);
         return base;
     }
 
@@ -415,7 +417,7 @@ QCoro::Task<bool> WebdavClient::testConnection()
 {
     const QUrl url = absoluteUrl(QString());
     qDebug() << "[WebdavClient] testConnection START"
-             << "| url:" << url.toString()
+             << "| url:" << LogRedactionUtils::url(url)
              << "| user:" << m_profile.username
              << "| ignoreSsl:" << m_profile.ignoreSsl;
 
@@ -445,7 +447,7 @@ QCoro::Task<bool> WebdavClient::testConnection()
     const bool ok = (qtErr == QNetworkReply::NoError) && (status == 207 || status == 200);
 
     qDebug() << "[WebdavClient] testConnection DONE"
-             << "| url:" << url.toString()
+             << "| url:" << LogRedactionUtils::url(url)
              << "| status:" << status
              << "| ok:" << ok
              << "| qtError:" << qtErr
@@ -499,7 +501,7 @@ QCoro::Task<bool> WebdavClient::ensureCollection(QStringList segments)
 
     qDebug() << "[WebdavClient] ensureCollection probe START"
              << "| path:" << pathLabel
-             << "| url:" << url.toString();
+             << "| url:" << LogRedactionUtils::url(url);
 
     QNetworkRequest req(url);
     applyAuthHeader(req);
@@ -542,7 +544,7 @@ QCoro::Task<bool> WebdavClient::ensureCollection(QStringList segments)
     {
         qDebug() << "[WebdavClient] ensureCollection MKCOL START"
                  << "| path:" << pathLabel
-                 << "| url:" << url.toString();
+                 << "| url:" << LogRedactionUtils::url(url);
 
         QNetworkRequest mkcolReq(url);
         applyAuthHeader(mkcolReq);
@@ -593,7 +595,7 @@ QCoro::Task<QList<WebdavEntry>> WebdavClient::list(QString relPath)
     const QUrl url = absoluteUrl(cleanRel);
 
     qDebug() << "[WebdavClient] list START"
-             << "| url:" << url.toString()
+             << "| url:" << LogRedactionUtils::url(url)
              << "| relPath:" << cleanRel;
 
     QNetworkRequest req(url);
@@ -620,7 +622,7 @@ QCoro::Task<QList<WebdavEntry>> WebdavClient::list(QString relPath)
     reply->deleteLater();
 
     qDebug() << "[WebdavClient] list response"
-             << "| url:" << url.toString()
+             << "| url:" << LogRedactionUtils::url(url)
              << "| status:" << status
              << "| qtError:" << qtErr
              << "| bodyLen:" << body.size();
@@ -660,7 +662,8 @@ QCoro::Task<QByteArray> WebdavClient::getFile(QString relPath)
     }
     const QUrl url = absoluteUrl(cleanRel);
 
-    qDebug() << "[WebdavClient] getFile START | url:" << url.toString();
+    qDebug() << "[WebdavClient] getFile START | url:"
+             << LogRedactionUtils::url(url);
 
     QNetworkRequest req(url);
     applyAuthHeader(req);
@@ -678,7 +681,7 @@ QCoro::Task<QByteArray> WebdavClient::getFile(QString relPath)
     reply->deleteLater();
 
     qDebug() << "[WebdavClient] getFile DONE"
-             << "| url:" << url.toString()
+             << "| url:" << LogRedactionUtils::url(url)
              << "| status:" << status
              << "| size:" << body.size();
 
@@ -703,7 +706,7 @@ QCoro::Task<bool> WebdavClient::putFile(QString relPath, QByteArray bytes, QStri
     const QUrl url = absoluteUrl(cleanRel);
 
     qDebug() << "[WebdavClient] putFile START"
-             << "| url:" << url.toString()
+             << "| url:" << LogRedactionUtils::url(url)
              << "| size:" << bytes.size()
              << "| contentType:" << contentType;
 
@@ -736,7 +739,7 @@ QCoro::Task<bool> WebdavClient::putFile(QString relPath, QByteArray bytes, QStri
         if (ok)
         {
             qDebug() << "[WebdavClient] putFile DONE"
-                     << "| url:" << url.toString()
+                     << "| url:" << LogRedactionUtils::url(url)
                      << "| status:" << status
                      << "| retried:" << retried;
             co_return true;
@@ -780,7 +783,8 @@ QCoro::Task<bool> WebdavClient::remove(QString relPath)
     }
     const QUrl url = absoluteUrl(cleanRel);
 
-    qDebug() << "[WebdavClient] remove START | url:" << url.toString();
+    qDebug() << "[WebdavClient] remove START | url:"
+             << LogRedactionUtils::url(url);
 
     QNetworkRequest req(url);
     applyAuthHeader(req);
@@ -819,7 +823,8 @@ QCoro::Task<bool> WebdavClient::mkcol(QString relPath)
     const QString cleanRel = sanitizeRelPath(relPath);
     const QUrl url = absoluteUrl(cleanRel);
 
-    qDebug() << "[WebdavClient] mkcol START | url:" << url.toString();
+    qDebug() << "[WebdavClient] mkcol START | url:"
+             << LogRedactionUtils::url(url);
 
     QNetworkRequest req(url);
     applyAuthHeader(req);

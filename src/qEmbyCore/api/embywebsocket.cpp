@@ -1,5 +1,6 @@
 #include "embywebsocket.h"
 #include "proxymanager.h"
+#include "../utils/logredactionutils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkProxy>
@@ -79,11 +80,12 @@ void EmbyWebSocket::connectToServer()
              << "| host:" << proxy.hostName()
              << "| port:" << proxy.port();
 
-    qDebug() << "[EmbyWebSocket] Connecting to:" << url;
+    qDebug() << "[EmbyWebSocket] Connecting to:"
+             << LogRedactionUtils::url(url);
     if (m_profile.ignoreSslVerification &&
         url.startsWith("wss://", Qt::CaseInsensitive)) {
         qWarning() << "[EmbyWebSocket] SSL certificate verification is DISABLED"
-                   << "| url:" << url;
+                   << "| url:" << LogRedactionUtils::url(url);
     }
     m_socket->open(QUrl(url));
 }
@@ -153,7 +155,7 @@ void EmbyWebSocket::onSslErrors(const QList<QSslError>& errors)
 
     const QString summary = errorMessages.join("; ");
     qWarning() << "[EmbyWebSocket] TLS validation errors"
-               << "| url:" << buildWebSocketUrl()
+               << "| url:" << LogRedactionUtils::url(buildWebSocketUrl())
                << "| ignoreSslVerification:"
                << m_profile.ignoreSslVerification
                << "| errors:" << summary;

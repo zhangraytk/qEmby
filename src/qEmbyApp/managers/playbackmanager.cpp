@@ -8,7 +8,7 @@
 #include <models/media/playbackinfo.h>
 #include "../components/playerwindow.h"
 #include "../components/moderntoast.h"
-#include "../utils/logredactionutils.h"
+#include <utils/logredactionutils.h>
 #include "../utils/playerpreferenceutils.h"
 #include <QProcess>
 #include <QFile>
@@ -451,13 +451,15 @@ void PlaybackManager::launchExternalPlayer(const QString& mediaId, const QString
     qDebug() << "[PlaybackManager] Original streamUrl:"
              << LogRedactionUtils::url(streamUrl);
     if (ConfigStore::instance()->get<bool>(ConfigKeys::ExtPlayerDirectStream, false) && hasSourceInfo) {
-        qDebug() << "[PlaybackManager] DirectStream enabled, sourceInfo.path:" << sourceInfo.path;
+        qDebug() << "[PlaybackManager] DirectStream enabled, sourceInfo.path:"
+                 << LogRedactionUtils::url(sourceInfo.path);
         qDebug() << "[PlaybackManager] sourceInfo.directStreamUrl:"
                  << LogRedactionUtils::url(sourceInfo.directStreamUrl);
         
         if (!sourceInfo.path.isEmpty()) {
             actualStreamUrl = sourceInfo.path;
-            qDebug() << "[PlaybackManager] Using sourceInfo.path as preferred direct source:" << actualStreamUrl;
+            qDebug() << "[PlaybackManager] Using sourceInfo.path as preferred direct source:"
+                     << LogRedactionUtils::url(actualStreamUrl);
         } else if (!sourceInfo.directStreamUrl.isEmpty()) {
             
             if (sourceInfo.directStreamUrl.startsWith("http://", Qt::CaseInsensitive) ||
@@ -497,7 +499,9 @@ void PlaybackManager::launchExternalPlayer(const QString& mediaId, const QString
             QString src = line.left(sepIdx).trimmed();
             QString dst = line.mid(sepIdx + 2).trimmed();
             if (!src.isEmpty() && actualStreamUrl.contains(src)) {
-                qDebug() << "[PlaybackManager] URL replace rule matched:" << src << "=>" << dst;
+                qDebug() << "[PlaybackManager] URL replace rule matched:"
+                         << LogRedactionUtils::url(src) << "=>"
+                         << LogRedactionUtils::url(dst);
                 actualStreamUrl.replace(src, dst);
                 qDebug() << "[PlaybackManager] After replace:"
                          << LogRedactionUtils::url(actualStreamUrl);
@@ -552,7 +556,8 @@ void PlaybackManager::launchExternalPlayer(const QString& mediaId, const QString
         case PlayerType::MPC_Qt:
             
             actualStreamUrl = QUrl::fromLocalFile(actualStreamUrl).toString();
-            qDebug() << "[PlaybackManager] Converted to file:// URI:" << actualStreamUrl;
+            qDebug() << "[PlaybackManager] Converted to file:// URI:"
+                     << LogRedactionUtils::url(actualStreamUrl);
             break;
         default:
             

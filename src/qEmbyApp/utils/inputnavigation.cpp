@@ -398,7 +398,7 @@ void animateScrollBarTo(QScrollBar* bar, int value)
 
 std::optional<NavigationCommand> fromKeyEvent(const QKeyEvent* event)
 {
-    if (!event || event->isAutoRepeat()) {
+    if (!event || (event->isAutoRepeat() && !isDirectionalKey(event->key()))) {
         return std::nullopt;
     }
     const auto modifiers = event->modifiers() &
@@ -425,6 +425,12 @@ std::optional<NavigationCommand> fromKeyEvent(const QKeyEvent* event)
     case Qt::Key_Forward: return NavigationCommand::Forward;
     default: return std::nullopt;
     }
+}
+
+bool isDirectionalKey(int key)
+{
+    return key == Qt::Key_Left || key == Qt::Key_Right ||
+           key == Qt::Key_Up || key == Qt::Key_Down;
 }
 
 bool isPlayPauseKey(int key)

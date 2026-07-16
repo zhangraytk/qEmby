@@ -1,6 +1,6 @@
 #include "mpvhttpstreamrelay.h"
 
-#include "../utils/logredactionutils.h"
+#include <utils/logredactionutils.h>
 
 #include <QAbstractSocket>
 #include <QDebug>

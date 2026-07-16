@@ -24,6 +24,10 @@
         <source>Search</source>
         <translation>Recherche</translation>
     </message>
+    <message>
+        <source>Failed to save server settings. Current changes may not persist after restart.</source>
+        <translation>Échec de l’enregistrement des paramètres du serveur. Les modifications actuelles risquent de ne pas être conservées après le redémarrage.</translation>
+    </message>
 </context>
 
 <context>
@@ -687,6 +691,14 @@ Erreur : </translation>
     <message>
         <source>Failed to update favorite status</source>
         <translation>Échec de la mise à jour du statut Favoris</translation>
+    </message>
+    <message>
+        <source>No playable media source is available.</source>
+        <translation>Aucune source multimédia lisible n’est disponible.</translation>
+    </message>
+    <message>
+        <source>Playback failed. Please try again.</source>
+        <translation>La lecture a échoué. Veuillez réessayer.</translation>
     </message>
     <message>
         <source>Marked as Played</source>

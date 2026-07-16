@@ -90,6 +90,13 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     m_core = new QEmbyCore(this);
+    connect(m_core->serverManager(), &ServerManager::settingsSaveFailed, this,
+            [this](const QString& errorMessage) {
+                Q_UNUSED(errorMessage);
+                ModernToast::showMessage(
+                    tr("Failed to save server settings. Current changes may not persist after restart."),
+                    3500);
+            });
 
     
     m_trayManager = new TrayManager(this);
@@ -792,7 +799,8 @@ void MainWindow::triggerFavoritesNavigation()
 
 bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
 {
-    if (!event || event->isAutoRepeat()) {
+    if (!event || (event->isAutoRepeat() &&
+                   !InputNavigation::isDirectionalKey(event->key()))) {
         return false;
     }
     if (!m_viewStack || !m_homeView || m_viewStack->currentWidget() != m_homeView) {
@@ -838,6 +846,10 @@ bool MainWindow::handleConfiguredShortcut(QKeyEvent *event)
         if (m_homeView->handleRemoteNavigation(*command)) {
             return true;
         }
+    }
+
+    if (event->isAutoRepeat()) {
+        return command.has_value();
     }
 
     if (m_homeView->triggerDashboardFeedShortcut(sequence)) {

@@ -1,4 +1,5 @@
 #include "authservice.h"
+#include "../../utils/logredactionutils.h"
 #include <QJsonObject>
 #include <QUuid>
 #include <QUrl>
@@ -34,7 +35,7 @@ QCoro::Task<ServerProfile> AuthService::login(const QString& serverUrl,
     requestOptions.ignoreSslErrors = ignoreSslVerification;
 
     qDebug() << "[AuthService] Login start"
-             << "| url:" << cleanUrl
+             << "| url:" << LogRedactionUtils::url(cleanUrl)
              << "| ignoreSslVerification:" << ignoreSslVerification;
 
     
@@ -137,7 +138,7 @@ QCoro::Task<ServerProfile> AuthService::login(const QString& serverUrl,
 
         if (tempProfile.iconBase64.isEmpty()) {
             qWarning() << "[AuthService] All icon fetch attempts failed"
-                       << "| url:" << tempProfile.url
+                       << "| url:" << LogRedactionUtils::url(tempProfile.url)
                        << "| type:" << (tempProfile.type == ServerProfile::Jellyfin ? "Jellyfin" : "Emby");
         }
     }

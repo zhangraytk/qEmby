@@ -4,6 +4,7 @@
 #include <services/media/mediaservice.h>
 #include <services/manager/servermanager.h> 
 #include <models/profile/serverprofile.h>
+#include <utils/logredactionutils.h>
 #include <config/config_keys.h>
 #include <config/configstore.h>
 #include <models/media/playerlaunchcontext.h>
@@ -52,6 +53,48 @@ BaseView::BaseView(QEmbyCore* core, QWidget *parent)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setProperty("showGlobalSearch", true);
+}
+
+quint64 BaseView::beginPlaybackRequest()
+{
+    return ++m_playbackRequestGeneration;
+}
+
+QString BaseView::currentPlaybackContextKey() const
+{
+    if (!m_core || !m_core->serverManager()) {
+        return {};
+    }
+    const ServerProfile profile = m_core->serverManager()->activeProfile();
+    if (!profile.isValid()) {
+        return {};
+    }
+    return profile.id + QLatin1Char('|') + profile.userId;
+}
+
+bool BaseView::isPlaybackRequestCurrent(quint64 generation,
+                                        const QString& contextKey) const
+{
+    return isVisible() && generation == m_playbackRequestGeneration &&
+           !contextKey.isEmpty() &&
+           contextKey == currentPlaybackContextKey();
+}
+
+void BaseView::reportPlaybackFailure(const QString& operation,
+                                     const QString& diagnostic,
+                                     bool noPlayableSource) const
+{
+    qWarning() << "[Playback]" << operation << "failed"
+               << "| reason:"
+               << (noPlayableSource ? QStringLiteral("no playable source")
+                                    : diagnostic.isEmpty()
+                                          ? QStringLiteral("unknown error")
+                                          : LogRedactionUtils::text(diagnostic));
+    ModernToast::showMessage(
+        noPlayableSource
+            ? tr("No playable media source is available.")
+            : tr("Playback failed. Please try again."),
+        3000);
 }
 
 bool BaseView::handleRemoteNavigation(NavigationCommand command)
@@ -238,46 +281,67 @@ QCoro::Task<void> BaseView::executePlay(MediaItem item)
     }
 
     QPointer<BaseView> safeThis(this);
+    const quint64 generation = beginPlaybackRequest();
+    const QString contextKey = currentPlaybackContextKey();
 
     try {
         MediaItem detail = co_await resolvePlaybackItem(item);
-        if (!safeThis || detail.id.isEmpty()) {
+        if (!safeThis ||
+            !safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            co_return;
+        }
+        if (detail.id.isEmpty() || detail.mediaSources.isEmpty()) {
+            safeThis->reportPlaybackFailure(QStringLiteral("resolve item"),
+                                            {}, true);
             co_return;
         }
 
         const QString playTitle = MediaItemUtils::playbackTitle(detail);
-        QString mediaSourceId = detail.id;
         QVariant sourceInfoVar;
         QString streamUrl;
 
-        if (!detail.mediaSources.isEmpty()) {
-            const int bestSourceIdx =
-                resolvePreferredMediaSourceIndex(detail.mediaSources);
-            MediaSourceInfo selectedSource = detail.mediaSources[bestSourceIdx];
-            PlayerPreferenceUtils::applyPreferredStreamRules(
-                selectedSource,
-                ConfigStore::instance()->get<QString>(
-                    ConfigKeys::PlayerAudioLang, "auto"),
-                ConfigStore::instance()->get<QString>(
-                    ConfigKeys::PlayerSubLang, "auto"));
+        const int bestSourceIdx =
+            resolvePreferredMediaSourceIndex(detail.mediaSources);
+        MediaSourceInfo selectedSource = detail.mediaSources[bestSourceIdx];
+        PlayerPreferenceUtils::applyPreferredStreamRules(
+            selectedSource,
+            ConfigStore::instance()->get<QString>(
+                ConfigKeys::PlayerAudioLang, "auto"),
+            ConfigStore::instance()->get<QString>(
+                ConfigKeys::PlayerSubLang, "auto"));
 
-            mediaSourceId = selectedSource.id;
-            PlayerLaunchContext launchContext;
-            launchContext.mediaItem = detail;
-            launchContext.selectedSource = selectedSource;
-            sourceInfoVar = QVariant::fromValue(launchContext);
-            streamUrl =
-                m_core->mediaService()->getStreamUrl(detail.id, selectedSource);
-        } else {
-            streamUrl =
-                m_core->mediaService()->getStreamUrl(detail.id, mediaSourceId);
+        PlayerLaunchContext launchContext;
+        launchContext.mediaItem = detail;
+        launchContext.selectedSource = selectedSource;
+        sourceInfoVar = QVariant::fromValue(launchContext);
+        streamUrl =
+            m_core->mediaService()->getStreamUrl(detail.id, selectedSource);
+
+        if (streamUrl.trimmed().isEmpty()) {
+            safeThis->reportPlaybackFailure(
+                QStringLiteral("resolve internal playback"), {}, true);
+            co_return;
         }
 
         const long long ticks = detail.userData.playbackPositionTicks;
+        if (!safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            co_return;
+        }
         Q_EMIT navigateToPlayer(detail.id, playTitle, streamUrl, ticks,
                                 sourceInfoVar);
     } catch (const std::exception& e) {
-        qDebug() << "BaseView play task failed:" << e.what();
+        if (safeThis &&
+            safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            safeThis->reportPlaybackFailure(
+                QStringLiteral("resolve internal playback"),
+                QString::fromUtf8(e.what()));
+        }
+    } catch (...) {
+        if (safeThis &&
+            safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            safeThis->reportPlaybackFailure(
+                QStringLiteral("resolve internal playback"));
+        }
     }
 }
 
@@ -289,10 +353,18 @@ QCoro::Task<void> BaseView::executeExternalPlay(MediaItem item,
     }
 
     QPointer<BaseView> safeThis(this);
+    const quint64 generation = beginPlaybackRequest();
+    const QString contextKey = currentPlaybackContextKey();
 
     try {
         MediaItem detail = co_await resolvePlaybackItem(item);
-        if (!safeThis || detail.id.isEmpty() || detail.mediaSources.isEmpty()) {
+        if (!safeThis ||
+            !safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            co_return;
+        }
+        if (detail.id.isEmpty() || detail.mediaSources.isEmpty()) {
+            safeThis->reportPlaybackFailure(QStringLiteral("resolve external playback"),
+                                            {}, true);
             co_return;
         }
 
@@ -309,11 +381,30 @@ QCoro::Task<void> BaseView::executeExternalPlay(MediaItem item,
             m_core->mediaService()->getStreamUrl(detail.id, selectedSource);
         const long long ticks = detail.userData.playbackPositionTicks;
 
+        if (!safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            co_return;
+        }
+        if (streamUrl.trimmed().isEmpty()) {
+            safeThis->reportPlaybackFailure(
+                QStringLiteral("resolve external playback"), {}, true);
+            co_return;
+        }
         PlaybackManager::instance()->startExternalPlayback(
             playerPath, detail.id, MediaItemUtils::playbackTitle(detail), streamUrl, ticks,
             QVariant::fromValue(selectedSource));
     } catch (const std::exception& e) {
-        qDebug() << "BaseView external play task failed:" << e.what();
+        if (safeThis &&
+            safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            safeThis->reportPlaybackFailure(
+                QStringLiteral("resolve external playback"),
+                QString::fromUtf8(e.what()));
+        }
+    } catch (...) {
+        if (safeThis &&
+            safeThis->isPlaybackRequestCurrent(generation, contextKey)) {
+            safeThis->reportPlaybackFailure(
+                QStringLiteral("resolve external playback"));
+        }
     }
 }
 

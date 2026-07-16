@@ -24,6 +24,10 @@
         <source>Search</source>
         <translation>搜索</translation>
     </message>
+    <message>
+        <source>Failed to save server settings. Current changes may not persist after restart.</source>
+        <translation>服务器设置保存失败，当前更改可能无法在重启后保留。</translation>
+    </message>
 </context>
 
 <context>
@@ -727,6 +731,14 @@ Error: </source>
     <message>
         <source>Failed to update favorite status</source>
         <translation>更新收藏状态失败</translation>
+    </message>
+    <message>
+        <source>No playable media source is available.</source>
+        <translation>没有可用的媒体播放源。</translation>
+    </message>
+    <message>
+        <source>Playback failed. Please try again.</source>
+        <translation>播放失败，请重试。</translation>
     </message>
     <message>
         <source>Marked as Played</source>

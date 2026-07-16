@@ -34,6 +34,7 @@ namespace InputNavigation
 {
 std::optional<NavigationCommand> fromKeyEvent(const QKeyEvent* event);
 bool isPlayPauseKey(int key);
+bool isDirectionalKey(int key);
 bool isTextEntryWidget(const QWidget* widget);
 bool moveSpatialFocus(QWidget* scope, NavigationCommand command);
 bool activateFocusedWidget(QWidget* scope);

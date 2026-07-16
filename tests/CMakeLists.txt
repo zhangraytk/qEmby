@@ -74,3 +74,38 @@ add_test(NAME qemby_sliding_stack_tests COMMAND qemby_sliding_stack_tests)
 set_tests_properties(qemby_sliding_stack_tests PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+qt_add_executable(qemby_safety_utils_tests
+    safetyutils_tests.cpp
+    ../src/qEmbyApp/utils/asyncrequestgate.h
+)
+
+target_include_directories(qemby_safety_utils_tests PRIVATE
+    ../src/qEmbyCore
+    ../src/qEmbyApp/utils
+)
+
+target_link_libraries(qemby_safety_utils_tests PRIVATE
+    Qt6::Core
+    Qt6::Test
+    qEmbyCore
+)
+
+add_test(NAME qemby_safety_utils_tests COMMAND qemby_safety_utils_tests)
+
+qt_add_executable(qemby_servermanager_tests
+    servermanager_tests.cpp
+)
+
+target_include_directories(qemby_servermanager_tests PRIVATE
+    ../src/qEmbyCore
+)
+
+target_link_libraries(qemby_servermanager_tests PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+    qEmbyCore
+)
+
+add_test(NAME qemby_servermanager_tests COMMAND qemby_servermanager_tests)

@@ -1,4 +1,5 @@
 #include "dandanplayprovider.h"
+#include "../../utils/logredactionutils.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -831,7 +832,7 @@ QCoro::Task<QList<DanmakuMatchCandidate>> DandanplayProvider::searchCandidates(
             qDebug().noquote()
                 << "[Danmaku][DandanPlay] Match request"
                 << "| fileName:" << fileName
-                << "| url:" << matchUrl;
+                << "| url:" << LogRedactionUtils::url(matchUrl);
             const QJsonObject matchResponse = co_await m_networkManager->post(
                 matchUrl, buildHeaders(config, matchPath), payload);
             hadSuccessfulSearchResponse = true;
@@ -882,7 +883,7 @@ QCoro::Task<QList<DanmakuMatchCandidate>> DandanplayProvider::searchCandidates(
                 << "[Danmaku][DandanPlay] Search request"
                 << "| path:" << apiPath
                 << "| keyword:" << keyword
-                << "| url:" << url;
+                << "| url:" << LogRedactionUtils::url(url);
             const QJsonObject response =
                 co_await m_networkManager->get(url, buildHeaders(config, apiPath));
             hadSuccessfulSearchResponse = true;
@@ -953,7 +954,7 @@ QCoro::Task<QList<DanmakuMatchCandidate>> DandanplayProvider::searchCandidates(
                 << "[Danmaku][DandanPlay] Search fallback request"
                 << "| path:" << fallbackPath
                 << "| keyword:" << keyword
-                << "| url:" << fallbackUrl;
+                << "| url:" << LogRedactionUtils::url(fallbackUrl);
             const QJsonObject fallbackResponse =
                 co_await m_networkManager->get(
                     fallbackUrl, buildHeaders(config, fallbackPath));
@@ -1041,7 +1042,7 @@ QCoro::Task<QList<DanmakuComment>> DandanplayProvider::fetchComments(
         << "[Danmaku][DandanPlay] Fetch comments"
         << "| targetId:" << candidate.targetId
         << "| withRelated:" << config.withRelated
-        << "| url:" << url;
+        << "| url:" << LogRedactionUtils::url(url);
     const QJsonObject response =
         co_await m_networkManager->get(url, buildHeaders(config, apiPath));
     comments = parseCommentsResponse(response);

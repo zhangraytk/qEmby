@@ -1,4 +1,5 @@
 #include "loginview.h"
+#include <utils/logredactionutils.h>
 #include "../../components/loadingoverlay.h"
 #include "../../components/moderncombobox.h"
 #include "../../components/modernmessagebox.h"
@@ -324,7 +325,7 @@ QUrl LoginView::buildNormalizedServerUrl(QString *errorMessage) const {
   qDebug() << "[LoginView] Normalized server URL"
            << "| address:" << displayServerAddress(normalizedUrl)
            << "| port:" << normalizedUrl.port(-1)
-           << "| finalUrl:" << normalizedUrl.toString(QUrl::FullyEncoded);
+           << "| finalUrl:" << LogRedactionUtils::url(normalizedUrl);
 
   return normalizedUrl;
 }
@@ -1033,7 +1034,7 @@ QCoro::Task<void> LoginView::onLoginClicked() {
 
   const QString fullUrl = normalizedUrl.toString(QUrl::FullyEncoded);
   qDebug() << "[LoginView] Attempting login"
-           << "| url:" << fullUrl
+           << "| url:" << LogRedactionUtils::url(fullUrl)
            << "| ignoreSslVerification:" << ignoreSslVerification;
 
   m_errorLabel->hide();
@@ -1170,5 +1171,3 @@ void LoginView::openProxyDialogForCurrentEntry() {
   }
   dlg->deleteLater();
 }
-
-

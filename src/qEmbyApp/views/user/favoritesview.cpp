@@ -32,6 +32,63 @@ FavoritesView::FavoritesView(QEmbyCore* core, QWidget *parent)
     
     
     setupUi();
+
+    m_favoritesContextKey = currentFavoritesContextKey();
+    if (m_core && m_core->serverManager()) {
+        connect(m_core->serverManager(), &ServerManager::activeServerChanged,
+                this, [this](const ServerProfile&) {
+                    const QString nextContextKey = currentFavoritesContextKey();
+                    if (nextContextKey == m_favoritesContextKey) {
+                        return;
+                    }
+
+                    m_favoritesContextKey = nextContextKey;
+                    m_loadGate.invalidate(nextContextKey);
+                    clearFavoritesState();
+
+                    if (!nextContextKey.isEmpty() && isVisible()) {
+                        loadFavoritesData();
+                    }
+                });
+    }
+}
+
+QString FavoritesView::currentFavoritesContextKey() const
+{
+    if (!m_core || !m_core->serverManager()) {
+        return {};
+    }
+    const ServerProfile profile = m_core->serverManager()->activeProfile();
+    if (!profile.isValid() || profile.id.trimmed().isEmpty()) {
+        return {};
+    }
+    return profile.id + QLatin1Char('|') + profile.userId;
+}
+
+void FavoritesView::clearFavoritesState()
+{
+    const QList<HorizontalListViewGallery*> galleries = {
+        m_moviesGallery, m_seriesGallery, m_collectionsGallery,
+        m_playlistsGallery, m_peopleGallery, m_foldersGallery};
+    for (HorizontalListViewGallery* gallery : galleries) {
+        if (gallery) {
+            gallery->setItems({});
+            gallery->clearKeyboardFocus();
+        }
+    }
+
+    const QList<QWidget*> headers = {
+        m_moviesHeader, m_seriesHeader, m_collectionsHeader,
+        m_playlistsHeader, m_peopleHeader, m_foldersHeader};
+    for (QWidget* header : headers) {
+        if (header && header->parentWidget()) {
+            header->parentWidget()->setVisible(false);
+        }
+    }
+
+    if (m_mainScrollArea && m_mainScrollArea->verticalScrollBar()) {
+        m_mainScrollArea->verticalScrollBar()->setValue(0);
+    }
 }
 
 void FavoritesView::setupUi()
@@ -438,9 +495,23 @@ void FavoritesView::showEvent(QShowEvent* event)
 
 QCoro::Task<void> FavoritesView::loadFavoritesData()
 {
+    const QString contextKey = currentFavoritesContextKey();
+    const AsyncRequestGate::Ticket ticket = m_loadGate.begin(contextKey);
+    m_favoritesContextKey = contextKey;
+
+    if (contextKey.isEmpty() || !m_core || !m_core->mediaService() ||
+        !m_core->serverManager()) {
+        clearFavoritesState();
+        co_return;
+    }
+
     auto* mediaService = m_core->mediaService();
-    
     QPointer<FavoritesView> guard(this);
+    const QString serverId = m_core->serverManager()->activeProfile().id;
+    auto isCurrent = [this, guard, ticket]() {
+        return guard && m_loadGate.isCurrent(ticket,
+                                             currentFavoritesContextKey());
+    };
 
     
     bool isTileFav = (ConfigStore::instance()->get<QString>(ConfigKeys::DefaultLibraryView, "poster") == "tile");
@@ -459,68 +530,77 @@ QCoro::Task<void> FavoritesView::loadFavoritesData()
     
     try {
         QList<MediaItem> movies = co_await mediaService->getFavoriteMovies(50);
-        if (!guard) co_return; 
+        if (!isCurrent()) co_return;
         m_moviesGallery->setItems(movies);
         if (m_moviesHeader && m_moviesHeader->parentWidget()) {
             m_moviesHeader->parentWidget()->setVisible(!movies.isEmpty());
         }
     } catch (const std::exception& e) {
+        if (!isCurrent()) co_return;
         qDebug() << "Failed to fetch favorite movies: " << e.what();
     }
+    if (!isCurrent()) co_return;
 
     
     try {
         QList<MediaItem> series = co_await mediaService->getFavoriteSeries(50);
-        if (!guard) co_return;
+        if (!isCurrent()) co_return;
         m_seriesGallery->setItems(series);
         if (m_seriesHeader && m_seriesHeader->parentWidget()) {
             m_seriesHeader->parentWidget()->setVisible(!series.isEmpty());
         }
     } catch (const std::exception& e) {
+        if (!isCurrent()) co_return;
         qDebug() << "Failed to fetch favorite series: " << e.what();
     }
+    if (!isCurrent()) co_return;
 
     
     try {
         QList<MediaItem> collections = co_await mediaService->getFavoriteCollections(50);
-        if (!guard) co_return;
+        if (!isCurrent()) co_return;
         m_collectionsGallery->setItems(collections);
         if (m_collectionsHeader && m_collectionsHeader->parentWidget()) {
             m_collectionsHeader->parentWidget()->setVisible(!collections.isEmpty());
         }
     } catch (const std::exception& e) {
+        if (!isCurrent()) co_return;
         qDebug() << "Failed to fetch favorite collections: " << e.what();
     }
+    if (!isCurrent()) co_return;
 
     
     try {
         QList<MediaItem> playlists = co_await mediaService->getFavoritePlaylists(50);
-        if (!guard) co_return;
+        if (!isCurrent()) co_return;
         m_playlistsGallery->setItems(playlists);
         if (m_playlistsHeader && m_playlistsHeader->parentWidget()) {
             m_playlistsHeader->parentWidget()->setVisible(!playlists.isEmpty());
         }
     } catch (const std::exception& e) {
+        if (!isCurrent()) co_return;
         qDebug() << "Failed to fetch favorite playlists: " << e.what();
     }
+    if (!isCurrent()) co_return;
 
     
     try {
         QList<MediaItem> people = co_await mediaService->getFavoritePeople(50);
-        if (!guard) co_return;
+        if (!isCurrent()) co_return;
         m_peopleGallery->setItems(people);
         if (m_peopleHeader && m_peopleHeader->parentWidget()) {
             m_peopleHeader->parentWidget()->setVisible(!people.isEmpty());
         }
     } catch (const std::exception& e) {
+        if (!isCurrent()) co_return;
         qDebug() << "Failed to fetch favorite people: " << e.what();
     }
+    if (!isCurrent()) co_return;
     
     
     
-    QString sid = m_core->serverManager()->activeProfile().id;
     bool showFavFolders = ConfigStore::instance()->get<bool>(
-        ConfigKeys::forServer(sid, ConfigKeys::ShowFavoriteFolders), false);
+        ConfigKeys::forServer(serverId, ConfigKeys::ShowFavoriteFolders), false);
 
     if (!showFavFolders) {
         if (m_foldersHeader && m_foldersHeader->parentWidget())
@@ -528,12 +608,13 @@ QCoro::Task<void> FavoritesView::loadFavoritesData()
     } else {
         try {
             QList<MediaItem> folders = co_await mediaService->getFavoriteFolders(50);
-            if (!guard) co_return;
+            if (!isCurrent()) co_return;
             m_foldersGallery->setItems(folders);
             if (m_foldersHeader && m_foldersHeader->parentWidget()) {
                 m_foldersHeader->parentWidget()->setVisible(!folders.isEmpty());
             }
         } catch (const std::exception& e) {
+            if (!isCurrent()) co_return;
             qDebug() << "Failed to fetch favorite folders: " << e.what();
         }
     }

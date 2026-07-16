@@ -169,6 +169,30 @@ private Q_SLOTS:
         QVERIFY(!InputNavigation::fromKeyEvent(&modified).has_value());
     }
 
+    void onlyDirectionalKeysSupportAutoRepeat()
+    {
+        QKeyEvent repeatedRight(QEvent::KeyPress, Qt::Key_Right,
+                                Qt::NoModifier, QString(), true, 2);
+        QCOMPARE(InputNavigation::fromKeyEvent(&repeatedRight),
+                 std::optional(NavigationCommand::Right));
+
+        QKeyEvent repeatedSelect(QEvent::KeyPress, Qt::Key_Select,
+                                 Qt::NoModifier, QString(), true, 2);
+        QVERIFY(!InputNavigation::fromKeyEvent(&repeatedSelect).has_value());
+
+        QKeyEvent repeatedBack(QEvent::KeyPress, Qt::Key_Back,
+                               Qt::NoModifier, QString(), true, 2);
+        QVERIFY(!InputNavigation::fromKeyEvent(&repeatedBack).has_value());
+
+        QKeyEvent repeatedPlay(QEvent::KeyPress, Qt::Key_MediaPlay,
+                               Qt::NoModifier, QString(), true, 2);
+        QVERIFY(!InputNavigation::fromKeyEvent(&repeatedPlay).has_value());
+
+        QKeyEvent modifiedRepeat(QEvent::KeyPress, Qt::Key_Down,
+                                 Qt::ControlModifier, QString(), true, 2);
+        QVERIFY(!InputNavigation::fromKeyEvent(&modifiedRepeat).has_value());
+    }
+
     void directionalFocusUsesVisualGeometryInsteadOfItemOrder()
     {
         const QRect source(410, 100, 120, 80);

@@ -2270,15 +2270,29 @@ QCoro::Task<void> DetailView::executePlay(MediaItem targetItem,
                                           long long startTicks) {
   if (targetItem.id.isEmpty())
     co_return;
+  QPointer<DetailView> safeThis(this);
+  const quint64 generation = beginPlaybackRequest();
+  const QString contextKey = currentPlaybackContextKey();
+  const QString expectedPageId = m_currentItemId;
+  auto isCurrent = [safeThis, generation, contextKey, expectedPageId]() {
+    return safeThis && safeThis->m_currentItemId == expectedPageId &&
+           safeThis->isPlaybackRequestCurrent(generation, contextKey);
+  };
+
   try {
     MediaItem actualItem = targetItem;
     if (actualItem.mediaSources.isEmpty()) {
       PlaybackInfo info =
           co_await m_core->mediaService()->getPlaybackInfo(actualItem.id);
+      if (!isCurrent())
+        co_return;
       actualItem.mediaSources = info.mediaSources;
     }
-    if (actualItem.mediaSources.isEmpty())
+    if (actualItem.mediaSources.isEmpty()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("detail internal playback"),
+                                      {}, true);
       co_return;
+    }
 
     int sourceIdx = 0;
     int selectedAudioIdx = -1;
@@ -2323,6 +2337,13 @@ QCoro::Task<void> DetailView::executePlay(MediaItem targetItem,
 
     QString streamUrl =
         m_core->mediaService()->getStreamUrl(actualItem.id, modifiedSource.id);
+    if (!isCurrent())
+      co_return;
+    if (streamUrl.trimmed().isEmpty()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("detail internal playback"),
+                                      {}, true);
+      co_return;
+    }
 
     const QString playTitle =
         MediaItemUtils::playbackTitle(actualItem, m_currentMediaItem.name);
@@ -2331,7 +2352,17 @@ QCoro::Task<void> DetailView::executePlay(MediaItem targetItem,
     PlaybackManager::instance()->startInternalPlayback(
         actualItem.id, playTitle, streamUrl, startTicks,
         QVariant::fromValue(modifiedSource));
+  } catch (const std::exception& e) {
+    if (isCurrent()) {
+      safeThis->reportPlaybackFailure(
+          QStringLiteral("detail internal playback"),
+          QString::fromUtf8(e.what()));
+    }
   } catch (...) {
+    if (isCurrent()) {
+      safeThis->reportPlaybackFailure(
+          QStringLiteral("detail internal playback"));
+    }
   }
 }
 
@@ -2343,16 +2374,25 @@ QCoro::Task<void> DetailView::executePlaySeason(MediaItem seasonItem) {
   QPointer<DetailView> safeThis(this);
   const QString seriesId = m_currentItemId;
   const QString seasonId = seasonItem.id;
+  const quint64 generation = beginPlaybackRequest();
+  const QString contextKey = currentPlaybackContextKey();
+  auto isCurrent = [safeThis, generation, contextKey, seriesId]() {
+    return safeThis && safeThis->m_currentItemId == seriesId &&
+           safeThis->isPlaybackRequestCurrent(generation, contextKey);
+  };
 
   try {
     QList<MediaItem> episodes =
         co_await m_core->mediaService()->getEpisodes(seriesId, seasonId);
-    if (!safeThis || safeThis->m_currentItemId != seriesId)
+    if (!isCurrent())
       co_return;
 
     MediaItem targetEpisode = resolveSeasonPlaybackEpisode(episodes);
-    if (targetEpisode.id.isEmpty())
+    if (targetEpisode.id.isEmpty()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("season playback"), {},
+                                      true);
       co_return;
+    }
 
     qDebug() << "[DetailView] Play season"
              << "seriesId=" << seriesId << "seasonId=" << seasonId
@@ -2363,7 +2403,7 @@ QCoro::Task<void> DetailView::executePlaySeason(MediaItem seasonItem) {
              << targetEpisode.userData.playbackPositionTicks;
 
     co_await safeThis->applySeriesPlayableItem(targetEpisode, false);
-    if (!safeThis || safeThis->m_currentItemId != seriesId)
+    if (!isCurrent())
       co_return;
 
     const MediaItem playbackItem =
@@ -2372,7 +2412,15 @@ QCoro::Task<void> DetailView::executePlaySeason(MediaItem seasonItem) {
             : targetEpisode;
     co_await safeThis->executePlay(
         playbackItem, playbackItem.userData.playbackPositionTicks);
+  } catch (const std::exception& e) {
+    if (isCurrent()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("season playback"),
+                                      QString::fromUtf8(e.what()));
+    }
   } catch (...) {
+    if (isCurrent()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("season playback"));
+    }
   }
 }
 
@@ -2380,15 +2428,29 @@ QCoro::Task<void> DetailView::executeExternalPlay(MediaItem targetItem,
                                                   QString playerPath) {
   if (targetItem.id.isEmpty() || playerPath.isEmpty())
     co_return;
+  QPointer<DetailView> safeThis(this);
+  const quint64 generation = beginPlaybackRequest();
+  const QString contextKey = currentPlaybackContextKey();
+  const QString expectedPageId = m_currentItemId;
+  auto isCurrent = [safeThis, generation, contextKey, expectedPageId]() {
+    return safeThis && safeThis->m_currentItemId == expectedPageId &&
+           safeThis->isPlaybackRequestCurrent(generation, contextKey);
+  };
+
   try {
     MediaItem actualItem = targetItem;
     if (actualItem.mediaSources.isEmpty()) {
       PlaybackInfo info =
           co_await m_core->mediaService()->getPlaybackInfo(actualItem.id);
+      if (!isCurrent())
+        co_return;
       actualItem.mediaSources = info.mediaSources;
     }
-    if (actualItem.mediaSources.isEmpty())
+    if (actualItem.mediaSources.isEmpty()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("detail external playback"),
+                                      {}, true);
       co_return;
+    }
 
     
     int sourceIdx = 0;
@@ -2420,6 +2482,13 @@ QCoro::Task<void> DetailView::executeExternalPlay(MediaItem targetItem,
 
     QString streamUrl =
         m_core->mediaService()->getStreamUrl(actualItem.id, modifiedSource.id);
+    if (!isCurrent())
+      co_return;
+    if (streamUrl.trimmed().isEmpty()) {
+      safeThis->reportPlaybackFailure(QStringLiteral("detail external playback"),
+                                      {}, true);
+      co_return;
+    }
 
     const QString playTitle =
         MediaItemUtils::playbackTitle(actualItem, m_currentMediaItem.name);
@@ -2428,7 +2497,17 @@ QCoro::Task<void> DetailView::executeExternalPlay(MediaItem targetItem,
     PlaybackManager::instance()->startExternalPlayback(
         playerPath, actualItem.id, playTitle, streamUrl, startTicks,
         QVariant::fromValue(modifiedSource));
+  } catch (const std::exception& e) {
+    if (isCurrent()) {
+      safeThis->reportPlaybackFailure(
+          QStringLiteral("detail external playback"),
+          QString::fromUtf8(e.what()));
+    }
   } catch (...) {
+    if (isCurrent()) {
+      safeThis->reportPlaybackFailure(
+          QStringLiteral("detail external playback"));
+    }
   }
 }
 
